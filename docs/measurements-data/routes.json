@@ -1,0 +1,190 @@
+{
+  "base": "https://wander-buddy.zebaro.dev",
+  "at": "2026-11-17T22:06:03.770Z",
+  "threshold": 10,
+  "responseMs": 889,
+  "cache": "MISS",
+  "towns": 233,
+  "rows": [
+    {
+      "town": "Schlüchtern",
+      "bahn": {
+        "dep": "09:12",
+        "arr": "09:37",
+        "transfers": 0
+      },
+      "found": {
+        "station": "Schlüchtern Bahnhof",
+        "arrival": "09:42",
+        "minutes": 42,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 37,
+      "arrivalDiff": 5,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Bad Hersfeld",
+      "bahn": {
+        "dep": "09:20",
+        "arr": "09:48",
+        "transfers": 0
+      },
+      "found": {
+        "station": "Bad Hersfeld Bahnhof",
+        "arrival": "09:53",
+        "minutes": 53,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 48,
+      "arrivalDiff": 5,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Gelnhausen",
+      "bahn": {
+        "dep": "09:12",
+        "arr": "09:59",
+        "transfers": 0
+      },
+      "found": {
+        "station": "Gelnhausen Bahnhof",
+        "arrival": "10:04",
+        "minutes": 64,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 59,
+      "arrivalDiff": 5,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Hanau",
+      "bahn": {
+        "dep": "09:12",
+        "arr": "10:13",
+        "transfers": 0
+      },
+      "found": {
+        "station": "Hanau Hauptbahnhof",
+        "arrival": "10:18",
+        "minutes": 78,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 73,
+      "arrivalDiff": 5,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Eisenach",
+      "bahn": {
+        "dep": "09:20",
+        "arr": "10:40",
+        "transfers": 1
+      },
+      "found": {
+        "station": "Hörschel Hp",
+        "arrival": "10:32",
+        "minutes": 92,
+        "transfers": 1
+      },
+      "bahnMinutesFrom0900": 100,
+      "arrivalDiff": -8,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Frankfurt am Main",
+      "bahn": {
+        "dep": "09:12",
+        "arr": "10:33",
+        "transfers": 0
+      },
+      "found": {
+        "station": "FRANKFURT(MAIN) SUD",
+        "arrival": "10:31",
+        "minutes": 91,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 93,
+      "arrivalDiff": -2,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Kassel",
+      "bahn": {
+        "dep": "09:20",
+        "arr": "10:51",
+        "transfers": 0
+      },
+      "found": {
+        "station": "Kassel Bahnhof Wilhelmshöhe",
+        "arrival": "10:52",
+        "minutes": 112,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 111,
+      "arrivalDiff": 1,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Gießen",
+      "bahn": {
+        "dep": "09:33",
+        "arr": "11:16",
+        "transfers": 0
+      },
+      "found": {
+        "station": "Gießen Licher Straße",
+        "arrival": "11:16",
+        "minutes": 136,
+        "transfers": 0
+      },
+      "bahnMinutesFrom0900": 136,
+      "arrivalDiff": 0,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Würzburg",
+      "bahn": {
+        "dep": "10:12",
+        "arr": "12:00",
+        "transfers": 1
+      },
+      "found": {
+        "station": "Würzburg-Zell",
+        "arrival": "11:56",
+        "minutes": 176,
+        "transfers": 1
+      },
+      "bahnMinutesFrom0900": 180,
+      "arrivalDiff": -4,
+      "ok": true,
+      "sameTransfers": true
+    },
+    {
+      "town": "Marburg",
+      "bahn": {
+        "dep": "09:33",
+        "arr": "11:34",
+        "transfers": 2
+      },
+      "found": {
+        "station": "Marburg Hauptbahnhof",
+        "arrival": "11:39",
+        "minutes": 159,
+        "transfers": 2
+      },
+      "bahnMinutesFrom0900": 154,
+      "arrivalDiff": 5,
+      "ok": true,
+      "sameTransfers": true
+    }
+  ]
+}
