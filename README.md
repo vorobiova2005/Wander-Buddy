@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Status](https://img.shields.io/badge/status-in%20development-orange)
 
-🌐 **Live:** [wander-buddy.zebaro.dev](https://wander-buddy.zebaro.dev)
+🌐 **Live:** [wander-buddy.zebaro.dev](https://wander-buddy.zebaro.dev) · 🎨 **Design:** [Figma mockups](https://www.figma.com/design/eHJRa1GYGJOchFUhApeLTm/Wander-Buddy) ([`docs/ui.md`](docs/ui.md))
 
 ---
 
@@ -41,7 +41,7 @@ a free Saturday, and no idea which of the towns around you are worth the trip.
 | 🌤️ Enrichment | weather ([Open-Meteo](https://open-meteo.com)) and places ([OpenTripMap](https://opentripmap.io)) at the town centre | ✅ done |
 | 🧮 Scoring | own formula: trip, weather, places → 0-100 ([`docs/scoring.md`](docs/scoring.md)) | ✅ done |
 | 🤖 AI verdict | top 3, plan for the day as a quest, checked JSON with a fallback ([`docs/ai-verdict.md`](docs/ai-verdict.md)) | ✅ done |
-| 🗺️ UI | map (Leaflet + OSM), character, quest | ⏳ next |
+| 🗺️ UI | mockups in Figma ✅ · web app: map (Leaflet + OSM), character Вандер, quest | ⏳ in progress |
 | 📏 Measurements | ~10 routes checked against bahn.de, response time with and without cache | 🔜 |
 
 ## 🛠️ Tech stack

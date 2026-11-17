@@ -2,6 +2,13 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [0.4.1] - 2026-11-17
+
+### 📚 Docs
+- 🎨 UI mockups in Figma linked from the README; `docs/ui.md` - design tokens (colors, spacing, radii, fonts
+  Unbounded + Manrope), components, the four screens, and Вандер the companion with 11 moods (4 chosen by the AI,
+  7 by the app from the trip data - sleepy, rainy, cold, hungry, lost, waiting, celebrating).
+
 ## [0.4.0] - 2026-11-17
 
 ### ✨ Added
