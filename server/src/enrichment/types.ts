@@ -40,8 +40,15 @@ export interface WeatherProvider {
   daily(points: Coordinates[], date: string): Promise<(Weather | null)[]>
 }
 
+export type PlacesNearby = {
+  /** A short list of the best places, best first. */
+  places: Place[]
+  /** How many notable sights there are within the radius in total (the list above is only the top); null if unknown. */
+  sightsTotal: number | null
+}
+
 export interface PlacesProvider {
   readonly name: string
-  /** Notable places within `radiusMeters`, best first. */
-  near(point: Coordinates, radiusMeters: number): Promise<Place[]>
+  /** Notable places within `radiusMeters`: the best few and how many there are in all. */
+  near(point: Coordinates, radiusMeters: number): Promise<PlacesNearby>
 }

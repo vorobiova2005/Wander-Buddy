@@ -39,8 +39,8 @@ a free Saturday, and no idea which of the towns around you are worth the trip.
 | 🧱 Skeleton | web + API containers, CI/CD, deploy | ✅ done |
 | 🚆 Reachability | towns reachable by regional transport ([Transitous](https://transitous.org)), swappable source | ✅ done |
 | 🌤️ Enrichment | weather ([Open-Meteo](https://open-meteo.com)) and places ([OpenTripMap](https://opentripmap.io)) at the town centre | ✅ done |
-| 🧮 Scoring | own ranking formula with unit tests | ⏳ next |
-| 🤖 AI verdict | top 3, plan for the day, JSON schema with a fallback | 🔜 |
+| 🧮 Scoring | own formula: trip, weather, places → 0-100 ([`docs/scoring.md`](docs/scoring.md)) | ✅ done |
+| 🤖 AI verdict | top 3, plan for the day, JSON schema with a fallback | ⏳ next |
 | 🗺️ UI | map (Leaflet + OSM), character, quest | 🔜 |
 | 📏 Measurements | ~10 routes checked against bahn.de, response time with and without cache | 🔜 |
 
@@ -90,7 +90,8 @@ The [`VERSION`](VERSION) file is the only place the version lives:
 │   └── src/
 │       ├── app.ts           routes, CORS and the JSON response format
 │       ├── reachability.ts  stops → towns, caching (any data source)
-│       ├── destinations.ts  towns + weather + places
+│       ├── destinations.ts  towns + weather + places + score
+│       ├── scoring.ts       the scoring formula (pure function)
 │       ├── enrichment/      weather and places sources: the interfaces + Open-Meteo, OpenTripMap
 │       ├── transit/         data sources: the interfaces + Transitous
 │       ├── version.ts       reads VERSION
@@ -144,7 +145,7 @@ Every response is JSON with an `ok` flag:
 | `GET` | `/api/health` | `{ "ok": true, "version": "0.1.0" }` - the server is alive 💚 |
 | `GET` | `/api/stations?q=Fulda` | up to 5 matching stations 🚉 |
 | `GET` | `/api/reachable?from=Fulda&date=2026-11-21&time=09:00&maxMinutes=120` | towns reachable by regional transport 🗺️ |
-| `GET` | `/api/destinations?…` (same parameters) | the same towns + weather on the day 🌤️ + places to see 🏰 |
+| `GET` | `/api/destinations?…` (same parameters) | the same towns + weather 🌤️ + places 🏰 + a score 🧮, best first |
 
 `/api/reachable` takes `from=<place>` or `lat=…&lon=…`; `date`/`time` are Europe/Berlin (default: today 09:00);
 `maxMinutes` 15-180 (default 120); `villages=true` also lists villages. Each town comes with minutes (waiting
@@ -161,9 +162,10 @@ curl "https://wander-buddy.zebaro.dev/api/reachable?from=Fulda&maxMinutes=120"
 CORS allows `https://wander-buddy.zebaro.dev` and `http://localhost:5173` (override with `CORS_ORIGINS`).
 `/api/destinations` adds to each town `weather` (WMO code, °C, rain %, mm, wind, sunshine hours - `null` beyond the
 15-day forecast, see `enrichment.weather`) and `places` (name, category, rating 1-3, distance), both looked up at the
-town centre.
+town centre, `sightsTotal` (notable sights around in all) and `score` - 0-100 with its parts (trip, weather, places),
+by formula 3.1 in [`docs/scoring.md`](docs/scoring.md). Towns come best score first.
 
-New endpoints are added step by step (scoring, AI verdict).
+New endpoints are added step by step (AI verdict).
 
 ## 🔄 CI/CD
 

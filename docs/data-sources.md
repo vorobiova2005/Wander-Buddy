@@ -113,14 +113,16 @@ day, 5 000 an hour, 600 a minute.
 [OpenTripMap](https://dev.opentripmap.org) - free plan: non-commercial, 5 000 requests a day, 10 a second; data
 ODbL (OpenStreetMap, Wikidata, Wikipedia) → credit in the footer. Key: `OPENTRIPMAP_API_KEY` (none → no places).
 
-- `GET /0.1/en/places/radius` twice per town, **3 km around the town centre**: sights
-  (`museums,historic,architecture,natural,cultural,religion`, rating 2+, up to 8) and cafés (up to 3).
+- `GET /0.1/en/places/radius` three times per town, **3 km around the town centre**: sights
+  (`museums,historic,architecture,natural,cultural,religion`, rating 2+, up to 8), cafés (up to 3), and
+  `format=count` of the sights rated 3 - **how many there are in all** (`sightsTotal`: Frankfurt 265,
+  Kassel 100, Sontra 1). The scoring uses that count; the list alone could not tell a town from a city.
 - Unnamed objects dropped; one entry per name (a railway or a park can come in many pieces).
 - Categories for the app: `museum`, `historic`, `architecture`, `nature`, `culture`, `food`, `other`;
   rating 1-3 (their "heritage" ratings 5-7 / "1h"-"3h" become 1-3).
 - **Their limiter is stricter than 10/s in bursts**: at 8/s about 4 of 62 calls still got `429`. Now requests are
   spaced to **5 a second** and a `429` is retried twice (after 1 s and 2 s) → 0 failures in a cold search of 31 towns.
-- Found places are kept **30 days** in `STATE_DIR/places.<provider>.json` (Docker volume): sights hardly change, and
+- Found places are kept **30 days** in `STATE_DIR/places.<provider>.v2.json` (Docker volume): sights hardly change, and
   a deploy does not cost the daily quota again. A failed town is not stored and is asked again next time.
 - **Quota protection** (code review, 17.11.2026): places are asked only for towns, **never for villages** (even with
   `villages=true`), and for at most **40 towns per search**, fastest first - one anonymous request with

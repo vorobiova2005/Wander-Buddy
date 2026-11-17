@@ -82,22 +82,32 @@ describe('OpenTripMap', () => {
     point: { lat: 50, lon: 9 },
   })
 
+  /** Answers like OpenTripMap: a count for format=count, otherwise the list for the asked kinds. */
+  const fakeOtm = (lists: Record<string, unknown[]>, count = 0) =>
+    vi.fn(async (input: string | URL | Request) => {
+      const q = new URL(String(input)).searchParams
+      if (q.get('format') === 'count') return json({ count })
+      return json(lists[q.get('kinds') === 'cafes' ? 'cafes' : 'sights'] ?? [])
+    })
+
   const client = (f: ReturnType<typeof vi.fn>) =>
     new OpenTripMap({ apiKey: 'k', userAgent: 'T', fetch: f as unknown as typeof fetch, minIntervalMs: 0, retryAfterMs: 0 })
 
   it('returns sights then cafés, named and without duplicates of one object', async () => {
-    const f = vi.fn(async (input: string | URL | Request) => {
-      const kinds = new URL(String(input)).searchParams.get('kinds')
-      return kinds === 'cafes'
-        ? json([feature('C1', 'Café Mozart', 'foods,cafes', 1, 120)])
-        : json([
-            feature('A', 'Main-Weser-Bahn', 'architecture,bridges', 7, 300),
-            feature('B', 'Main-Weser-Bahn', 'architecture,bridges', 7, 500),
-            feature('M', 'Brüder Grimm-Museum', 'cultural,museums', 7, 900),
-            feature('X', '', 'historic', 3, 50),
-          ])
-    })
-    const places = await client(f).near({ lat: 51.3, lon: 9.5 }, 3000)
+    const f = fakeOtm(
+      {
+        cafes: [feature('C1', 'Café Mozart', 'foods,cafes', 1, 120)],
+        sights: [
+          feature('A', 'Main-Weser-Bahn', 'architecture,bridges', 7, 300),
+          feature('B', 'Main-Weser-Bahn', 'architecture,bridges', 7, 500),
+          feature('M', 'Brüder Grimm-Museum', 'cultural,museums', 7, 900),
+          feature('X', '', 'historic', 3, 50),
+        ],
+      },
+      100,
+    )
+    const { places, sightsTotal } = await client(f).near({ lat: 51.3, lon: 9.5 }, 3000)
+    expect(sightsTotal).toBe(100)
     expect(places.map((p) => [p.name, p.category, p.rating])).toEqual([
       ['Main-Weser-Bahn', 'architecture', 3],
       ['Brüder Grimm-Museum', 'museum', 3],
@@ -108,27 +118,36 @@ describe('OpenTripMap', () => {
 
   it('retries a 429 and gives up with an UpstreamError if it stays', async () => {
     let calls = 0
-    const flaky = vi.fn(async () => (++calls === 1 ? json({}, 429) : json([])))
-    await expect(client(flaky).near({ lat: 1, lon: 2 }, 1000)).resolves.toEqual([])
+    const ok = fakeOtm({}, 3)
+    const flaky = vi.fn(async (input: string | URL | Request) => (++calls === 1 ? json({}, 429) : ok(input)))
+    await expect(client(flaky).near({ lat: 1, lon: 2 }, 1000)).resolves.toEqual({ places: [], sightsTotal: 3 })
 
     const limited = vi.fn(async () => json({}, 429))
     await expect(client(limited).near({ lat: 1, lon: 2 }, 1000)).rejects.toBeInstanceOf(UpstreamError)
-    // At least one list went through 1 call + 2 retries before giving up.
+    // At least one call went through 1 try + 2 retries before giving up.
     expect(limited.mock.calls.length).toBeGreaterThanOrEqual(3)
   })
 
   it('spaces requests to stay under the plan limit', async () => {
     const times: number[] = []
-    const f = vi.fn(async () => {
+    const answer = fakeOtm({})
+    const f = vi.fn(async (input: string | URL | Request) => {
       times.push(Date.now())
-      return json([])
+      return answer(input)
     })
     const otm = new OpenTripMap({ apiKey: 'k', userAgent: 'T', fetch: f as unknown as typeof fetch, minIntervalMs: 100 })
     await Promise.all([otm.near({ lat: 1, lon: 2 }, 1000), otm.near({ lat: 3, lon: 4 }, 1000)])
     const gaps = times.slice(1).map((t, i) => t - times[i])
-    // 4 requests, ~100 ms apart (timers on Windows can fire up to ~16 ms early).
-    expect(times).toHaveLength(4)
+    // 6 requests (3 per town), ~100 ms apart (timers on Windows can fire up to ~16 ms early).
+    expect(times).toHaveLength(6)
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(80)
+  })
+
+  it('fails when the count answer has no number', async () => {
+    const f = vi.fn(async (input: string | URL | Request) =>
+      new URL(String(input)).searchParams.get('format') === 'count' ? json({ nope: 1 }) : json([]),
+    )
+    await expect(client(f).near({ lat: 1, lon: 2 }, 1000)).rejects.toBeInstanceOf(UpstreamError)
   })
 
   it('maps OpenTripMap kinds and ratings', () => {

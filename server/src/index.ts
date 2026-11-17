@@ -25,7 +25,8 @@ const reachability = new ReachabilityService({ transit, locality, localityStore,
 const weather = createWeatherProvider()
 const places = createPlacesProvider()
 // Found places survive restarts and deploys (a month), one file per places provider.
-const placesStore = new PersistentMap<StoredPlaces>(join(stateDir, `places.${places.name}.json`))
+// v2: entries also carry sightsTotal; v1 files (without it) are left alone and no longer read.
+const placesStore = new PersistentMap<StoredPlaces>(join(stateDir, `places.${places.name}.v2.json`))
 const destinations = new DestinationService({ reachability, weather, places, placesStore })
 
 serve({ fetch: createApp({ corsOrigins, reachability, destinations }).fetch, port }, (info) => {

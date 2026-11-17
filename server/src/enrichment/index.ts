@@ -9,7 +9,7 @@ export * from './types.js'
 class NoPlaces implements PlacesProvider {
   readonly name = 'none'
   async near() {
-    return []
+    return { places: [], sightsTotal: null }
   }
 }
 

@@ -1,6 +1,7 @@
 import { PersistentMap, TtlCache } from './cache.js'
-import type { Place, PlacesProvider, Weather, WeatherProvider } from './enrichment/types.js'
+import type { Place, PlacesNearby, PlacesProvider, Weather, WeatherProvider } from './enrichment/types.js'
 import { mapLimit, type City, type Reachability, type ReachabilityQuery, type ReachabilityService } from './reachability.js'
+import { DEFAULT_WEIGHTS, score, type Score, type Weights } from './scoring.js'
 import { todayIn } from './time.js'
 import type { Coordinates } from './transit/types.js'
 
@@ -10,12 +11,19 @@ export type Destination = City & {
   weather: Weather | null
   /** Notable places around the town centre, best first; empty for villages, or when the source has none or failed. */
   places: Place[]
+  /** How many notable sights the town has around its centre in all (the list is only the best); null if unknown. */
+  sightsTotal: number | null
+  /** How attractive the trip is, 0-100, with its parts (scoring.ts, docs/scoring.md). */
+  score: Score
 }
 
 export type WeatherStatus = 'ok' | 'out_of_range' | 'unavailable'
 
 export type Destinations = Omit<Reachability, 'cities'> & {
   date: string
+  /** The weights the scores were computed with. */
+  weights: Weights
+  /** Best score first. */
   cities: Destination[]
   enrichment: {
     weather: WeatherStatus
@@ -51,15 +59,17 @@ type Deps = {
   /** Today in Europe/Berlin (injectable for tests). */
   today?: () => string
   now?: () => number
+  /** Scoring weights; DEFAULT_WEIGHTS when not given. */
+  weights?: Weights
 }
 
-export type StoredPlaces = { at: number; places: Place[] }
+export type StoredPlaces = PlacesNearby & { at: number }
 
 export class DestinationService {
   private readonly weatherCache: TtlCache<Weather | null>
   private readonly placesStore: PersistentMap<StoredPlaces>
   private readonly placesTtlMs: number
-  private readonly inflight = new Map<string, Promise<Place[]>>()
+  private readonly inflight = new Map<string, Promise<PlacesNearby>>()
   /** Circuit breaker for the places source: failures in a row and the time the pause ends. */
   private failuresInRow = 0
   private pausedUntil = 0
@@ -86,13 +96,21 @@ export class DestinationService {
     const wantPlaces = cities.map((c) => c.kind !== 'village' && eligible++ < cap)
 
     const [weather, places] = await Promise.all([this.weatherFor(points, date), this.placesFor(points, wantPlaces)])
+    const weights = this.deps.weights ?? DEFAULT_WEIGHTS
 
     return {
       cached,
       result: {
         ...reach,
         date,
-        cities: cities.map((c, i) => ({ ...c, weather: weather.list[i], places: places.list[i] })),
+        weights,
+        cities: cities
+          .map((c, i) => {
+            const enriched = { weather: weather.list[i], ...places.list[i] }
+            const s = score({ minutes: c.minutes, transfers: c.transfers, maxMinutes: reach.maxMinutes, ...enriched }, weights)
+            return { ...c, ...enriched, score: s }
+          })
+          .sort((a, b) => b.score.total - a.score.total || a.minutes - b.minutes),
         enrichment: {
           weather: weather.status,
           weatherSource: this.deps.weather.name,
@@ -129,7 +147,7 @@ export class DestinationService {
   private async placesFor(
     points: Coordinates[],
     wanted: boolean[],
-  ): Promise<{ failures: number; skipped: number; paused: boolean; list: Place[][] }> {
+  ): Promise<{ failures: number; skipped: number; paused: boolean; list: PlacesNearby[] }> {
     const radius = this.deps.placesRadiusMeters ?? 3000
     const now = (this.deps.now ?? Date.now)()
     let failures = 0
@@ -138,26 +156,28 @@ export class DestinationService {
     const list = await mapLimit(points, this.deps.concurrency ?? 4, async (p, i) => {
       const key = `${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${radius}`
       const known = this.placesStore.get(key)
-      if (known && now - known.at < this.placesTtlMs) return known.places
+      const none: PlacesNearby = { places: [], sightsTotal: null }
+      const stale = known ? { places: known.places, sightsTotal: known.sightsTotal } : none
+      if (known && now - known.at < this.placesTtlMs) return stale
       // Not asked: a village, beyond the cap, or the source is paused. An outdated list still beats none.
       if (!wanted[i] || this.isPaused()) {
         skipped++
-        return known?.places ?? []
+        return stale
       }
       const running = this.inflight.get(key)
-      if (running) return running.catch(() => known?.places ?? [])
+      if (running) return running.catch(() => stale)
       const work = this.deps.places.near(p, radius).finally(() => this.inflight.delete(key))
       this.inflight.set(key, work)
       try {
         const found = await work
-        this.placesStore.set(key, { at: now, places: found })
+        this.placesStore.set(key, { at: now, ...found })
         this.failuresInRow = 0
         return found
       } catch (err) {
         failures++
         this.recordFailure()
         console.warn(`Places: ${(err as Error).message}`)
-        return known?.places ?? [] // not refreshed: asked again next time (unless paused)
+        return stale // not refreshed: asked again next time (unless paused)
       }
     })
     try {

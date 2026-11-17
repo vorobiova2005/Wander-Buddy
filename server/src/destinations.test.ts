@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PersistentMap } from './cache.js'
 import { DestinationService, type StoredPlaces } from './destinations.js'
-import type { Place, PlacesProvider, Weather, WeatherProvider } from './enrichment/types.js'
+import type { Place, PlacesNearby, PlacesProvider, Weather, WeatherProvider } from './enrichment/types.js'
 import { ReachabilityService } from './reachability.js'
 import { UpstreamError, type Coordinates, type Locality } from './transit/types.js'
 
@@ -53,7 +53,7 @@ function setup(
   } = {},
 ) {
   const weather: WeatherProvider = { name: 'w', horizonDays: 15, daily: vi.fn(async (pts) => pts.map(() => sunny)), ...over.weather }
-  const places: PlacesProvider = { name: 'p', near: vi.fn(async () => [wartburg]), ...over.places }
+  const places: PlacesProvider = { name: 'p', near: vi.fn(async () => ({ places: [wartburg], sightsTotal: 74 })), ...over.places }
   const store = new PersistentMap<StoredPlaces>()
   const service = new DestinationService({
     reachability: reachability(),
@@ -76,7 +76,9 @@ describe('DestinationService', () => {
     expect(result.date).toBe('2026-11-21')
     expect(result.cities).toHaveLength(1) // the village is left out before any enrichment request
     const [eisenach] = result.cities
-    expect(eisenach).toMatchObject({ name: 'Eisenach', weather: sunny, places: [wartburg], center: CENTER })
+    expect(eisenach).toMatchObject({ name: 'Eisenach', weather: sunny, places: [wartburg], sightsTotal: 74, center: CENTER })
+    expect(eisenach.score.total).toBeGreaterThan(0)
+    expect(result.weights).toEqual({ trip: 0.4, weather: 0.3, places: 0.3 })
     expect(vi.mocked(places.near).mock.calls[0][0]).toEqual(CENTER)
     expect(vi.mocked(weather.daily).mock.calls[0][0]).toEqual([CENTER])
     expect(result.enrichment).toEqual({
@@ -163,7 +165,7 @@ describe('DestinationService', () => {
   it('pauses a places source that keeps failing, then tries again after the pause', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     let now = 0
-    const near = vi.fn(async (): Promise<Place[]> => {
+    const near = vi.fn(async (): Promise<PlacesNearby> => {
       throw new UpstreamError('p', 'HTTP 429')
     })
     const { service } = setup({ places: { near }, now: () => now })
@@ -178,5 +180,43 @@ describe('DestinationService', () => {
     await service.destinations(query, { villages: false })
     expect(near).toHaveBeenCalledTimes(4)
     warn.mockRestore()
+  })
+
+  it('sorts the towns by score, so a farther town with much to see beats a near one with nothing', async () => {
+    const near = { lat: 50.1, lon: 9.1 }
+    const far = { lat: 50.9, lon: 9.9 }
+    const kinds = (['museum', 'historic', 'nature', 'architecture'] as const).map((category) => ({ ...wartburg, category }))
+    const service = new DestinationService({
+      reachability: new ReachabilityService({
+        transit: {
+          name: 'fake',
+          findStations: async () => [],
+          reachableStops: async () => [
+            { id: 'n', name: 'Nah', ...near, minutes: 30, vehicles: 1, arrival: 'x', rail: true },
+            { id: 'f', name: 'Fern', ...far, minutes: 100, vehicles: 1, arrival: 'x', rail: true },
+          ],
+        },
+        locality: {
+          name: 'fake',
+          localityAt: async (p) =>
+            p.lat === near.lat ? { name: 'Nah', kind: 'town' } : p.lat === far.lat ? { name: 'Fern', kind: 'city' } : { name: 'Fulda', kind: 'town' },
+        },
+      }),
+      weather: { name: 'w', horizonDays: 15, daily: async (pts) => pts.map(() => sunny) },
+      places: {
+        name: 'p',
+        near: async (p) => (p.lat === far.lat ? { places: kinds, sightsTotal: 265 } : { places: [], sightsTotal: 0 }),
+      },
+      today: () => '2026-11-17',
+    })
+    const { result } = await service.destinations(query, { villages: false })
+    expect(result.cities.map((c) => c.name)).toEqual(['Fern', 'Nah']) // reachability alone gives Nah first
+    expect(result.cities[0].score.total).toBeGreaterThan(result.cities[1].score.total)
+  })
+
+  it('does not punish a town whose places were not looked up', async () => {
+    const { service } = setup({ maxPlacesTowns: 0 })
+    const { result } = await service.destinations(query, { villages: false })
+    expect(result.cities[0].score).toMatchObject({ placesUnknown: true, parts: { places: 0.5 } })
   })
 })
