@@ -41,17 +41,17 @@ a free Saturday, and no idea which of the towns around you are worth the trip.
 | 🌤️ Enrichment | weather ([Open-Meteo](https://open-meteo.com)) and places ([OpenTripMap](https://opentripmap.io)) at the town centre | ✅ done |
 | 🧮 Scoring | own formula: trip, weather, places → 0-100 ([`docs/scoring.md`](docs/scoring.md)) | ✅ done |
 | 🤖 AI verdict | top 3, plan for the day as a quest, checked JSON with a fallback ([`docs/ai-verdict.md`](docs/ai-verdict.md)) | ✅ done |
-| 🗺️ UI | mockups in Figma ✅ · web app: map (Leaflet + OSM), character Вандер, quest | ⏳ in progress |
+| 🗺️ UI | Figma mockups (phone + desktop) · web app: search, results on a map, quest with XP, progress; Вандер in 11 moods ([`docs/ui.md`](docs/ui.md)) | ✅ done |
 | 📏 Measurements | ~10 routes checked against bahn.de, response time with and without cache | 🔜 |
 
 ## 🛠️ Tech stack
 
 | Part | Technology |
 | ---- | ---------- |
-| 🎨 Web app | [Vite](https://vite.dev) · [React](https://react.dev) · TypeScript · [Tailwind CSS](https://tailwindcss.com) · [react-i18next](https://react.i18next.com) · [Leaflet](https://leafletjs.com) *(map, coming)* |
+| 🎨 Web app | [Vite](https://vite.dev) · [React](https://react.dev) · TypeScript · [Tailwind CSS](https://tailwindcss.com) · [react-i18next](https://react.i18next.com) · [Leaflet](https://leafletjs.com) + OpenStreetMap |
 | ⚙️ API server | [Node.js](https://nodejs.org) 24 · [Hono](https://hono.dev) · TypeScript |
 | 🌐 Web server | [nginx](https://nginx.org) - static files + `/api` proxy |
-| 🧪 Quality | ESLint · `tsc --strict` · [Vitest](https://vitest.dev) · Testing Library |
+| 🧪 Quality | ESLint · `tsc --strict` · [Vitest](https://vitest.dev) · Testing Library · [Playwright](https://playwright.dev) (phone + desktop) |
 | 🐳 Delivery | Docker · GitHub Actions · GitHub Container Registry · `docker compose` over SSH |
 
 ## 🏗️ How it fits together
@@ -83,8 +83,13 @@ The [`VERSION`](VERSION) file is the only place the version lives:
 .
 ├── 🎨 web/                  React app (Vite)
 │   ├── nginx.conf           production web server: static files + /api proxy
+│   ├── e2e/                 Playwright: search → results → quest → XP, on a phone and a desktop
 │   └── src/
-│       ├── App.tsx          main screen
+│       ├── App.tsx          the shell: navigation, routes, footer credits, level-up
+│       ├── screens/         Search · Results · Quest · Progress
+│       ├── components/      Вандер (11 moods), the map, city card, navigation, buttons
+│       ├── lib/             progress (XP, levels, badges), mood, quest without AI, routes, dates
+│       ├── api/             the API client and its answer types
 │       └── i18n/locales/    UI texts (uk.json)
 ├── ⚙️ server/               API server (Hono)
 │   └── src/
@@ -120,13 +125,14 @@ npm run dev:server      # ⚙️ API on http://localhost:8080
 npm run dev:web         # 🎨 app on http://localhost:5173 (proxies /api to :8080)
 ```
 
-Open http://localhost:5173. A green dot 🟢 means the app reaches the server.
+Open http://localhost:5173, pick a town and a day - the results, the map and the quest come from the API.
 
 ### 🧰 Useful commands
 
 | Command | What it does |
 | ------- | ------------ |
-| `npm run check` | ✅ everything CI checks: lint, types, tests for web and server |
+| `npm run check` | ✅ lint, types, unit tests for web and server |
+| `npm run e2e -w web` | 🎭 end-to-end in the installed Chrome, phone and desktop (API answered from fixtures) |
 | `npm run build` | 📦 production build of both parts |
 | `docker compose up --build` | 🐳 both production containers locally → http://localhost:8080 |
 | `npm run keys:check -w server` | 🔑 are the API keys in `.env` accepted? (prints verdicts and limits, never the keys) |
@@ -175,7 +181,7 @@ by formula 3.1 in [`docs/scoring.md`](docs/scoring.md). Towns come best score fi
 
 | When | Workflow | What happens |
 | ---- | -------- | ------------ |
-| push to `main` / pull request | **CI** | 🧪 install → lint → typecheck → tests → build · 🐳 both images build |
+| push to `main` / pull request | **CI** | 🧪 install → lint → typecheck → tests → e2e → build · 🐳 both images build |
 | tag `vX.Y.Z` | **CD** | 🧪 the same checks → 🏷️ tag == `VERSION`? → 🐳 build `wander-buddy-server` and `wander-buddy-web` → 📤 push to GHCR → 🚀 `docker compose up` on the server over SSH |
 
 A tag on a red commit never reaches the server.

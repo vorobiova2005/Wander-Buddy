@@ -1,1 +1,127 @@
 @import "tailwindcss";
+@import "@fontsource-variable/unbounded";
+@import "@fontsource-variable/manrope";
+@import "leaflet/dist/leaflet.css";
+
+/* Design tokens - the same names and values as the Figma variables (docs/ui.md). */
+@theme {
+  --color-bg: #fff6e5;
+  --color-surface: #ffffff;
+  --color-surface-alt: #fcebd0;
+  --color-ink: #1b2a41;
+  --color-ink-muted: #5b6577;
+  --color-primary: #127c7a;
+  --color-primary-strong: #0e5e5c;
+  --color-primary-soft: #d5eeec;
+  --color-on-primary: #ffffff;
+  --color-accent: #f2994a;
+  --color-sun: #f2c94c;
+  --color-danger: #d9534f;
+  /* Text shades for small text (WCAG AA ≥ 4.5:1): on primary-soft, and errors on white. */
+  --color-danger-strong: #b3261e;
+  --color-success: #3ba776;
+  --color-line: #e9dcc4;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+
+  --font-display: "Unbounded Variable", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Manrope Variable", "Segoe UI", system-ui, sans-serif;
+
+  --animate-bob: bob 3.2s ease-in-out infinite;
+  --animate-pop: pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+  --animate-fade: fade 240ms ease-out both;
+
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes pop {
+    from { transform: scale(0.85); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  @keyframes rise {
+    0% { opacity: 0; transform: translateY(6px); }
+    15% { opacity: 1; transform: none; }
+    75% { opacity: 1; }
+    100% { opacity: 0; transform: translateY(-10px); }
+  }
+  @keyframes fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+    font-size: 15px;
+    line-height: 22px;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
+  }
+}
+
+/* Type ramp from Figma: Label 12/16 ExtraBold +6 %. */
+@utility label {
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+}
+
+/* Leaflet pins drawn with the tokens (components/Map.tsx). */
+.wb-pin {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2.5px solid var(--color-ink);
+  font: 800 12px/1 var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  box-shadow: 0 1px 0 rgb(27 42 65 / 0.25);
+}
+.wb-pin--top { background: var(--color-accent); color: var(--color-ink); }
+.wb-pin--origin { background: var(--color-ink); border-color: var(--color-surface); }
+.wb-pin--dot { border-width: 2px; background: var(--color-primary-soft); }
+.wb-pin--done { background: var(--color-success); color: var(--color-ink); }
+.wb-pin { transition: transform 150ms ease-out, box-shadow 150ms ease-out; }
+.wb-pin--active { transform: scale(1.3); box-shadow: 0 0 0 4px rgb(18 124 122 / 0.35); }
+/* Calmer OpenStreetMap tiles, closer to the palette; the data and labels stay readable. */
+.leaflet-tile-pane {
+  filter: saturate(0.6) brightness(1.04) contrast(0.95);
+}
+.leaflet-container {
+  font-family: var(--font-sans);
+  background: var(--color-primary-soft);
+}
+.leaflet-tooltip.wb-label {
+  background: rgb(255 255 255 / 0.92);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 1px 6px;
+  font: 600 12px/18px var(--font-sans);
+  color: var(--color-ink);
+}
+.leaflet-tooltip.wb-label::before { display: none; }

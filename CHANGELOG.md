@@ -2,6 +2,32 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [Unreleased]
+
+### ✨ Added
+- 🗺️ **The web app** (step 07), built from the Figma mockups, for phones and desktops (≥ 1024 px: top bar, two
+  columns):
+  - 🔎 **Пошук** - where from (station suggestions, or "Я тут" by location), this weekend or another date,
+    departure time, travel limit;
+  - 📍 **Результати** - the map (Leaflet + OpenStreetMap) with the start, the top 3 and two more towns, a legend;
+    Вандер's verdict, reasons, comparison, warnings; the other towns on demand; pointing at a card lights its pin;
+  - 🧭 **Квест** - the AI's plan, or for any other town a plan from its places; tap a step to complete it (again to
+    undo), "+XP" pops up; the way back on bahn.de;
+  - 🏆 **Прогрес** - level and title, XP, visited towns on a map, 6 badges with hints; a level-up moment.
+- 🧑‍🚀 Вандер in 11 moods with his own funny lines; the app picks a situational mood (sleepy, rainy, cold, hungry,
+  lost, waiting, celebrating) from the data, the AI's mood otherwise.
+- 💾 Progress only in the browser (localStorage); a started quest keeps its own plan.
+- 🔗 The search lives in the URL: back works, reload keeps the screen, a link can be shared.
+- 🎭 End-to-end test (Playwright, the installed Chrome): search → results → quest → XP, on a phone (also at
+  360 px) and a desktop; in the gate and in CI.
+- ♿ Accessibility: whole cards and steps are read, one status line for loading, AA contrast for small text,
+  44 px touch targets, keyboard-friendly station list.
+- 🔤 Fonts Unbounded + Manrope served by the app itself (no Google request); the map loads in its own chunk.
+
+### 🔧 Changed
+- 🤖 The AI verdict keeps ids out of its texts (names only) and writes the quest as a plan for the day; a text
+  with an id is sent back to the model.
+
 ## [0.4.1] - 2026-11-17
 
 ### 📚 Docs

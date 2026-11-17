@@ -33,6 +33,9 @@ jobs:
       - name: Web - lint, typecheck, test
         run: npm run check -w web
 
+      - name: Web - end-to-end (Playwright, the runner's Chrome)
+        run: npm run e2e -w web
+
       - name: Server - typecheck, test
         run: npm run check -w server
 
