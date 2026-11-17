@@ -4,7 +4,9 @@ import { createApp } from './app.js'
 import { PersistentMap } from './cache.js'
 import { DestinationService, type StoredPlaces } from './destinations.js'
 import { createPlacesProvider, createWeatherProvider } from './enrichment/index.js'
+import { createAiProvider } from './ai/index.js'
 import { ReachabilityService } from './reachability.js'
+import { VerdictService } from './verdict.js'
 import { createLocalityResolver, createTransitProvider, type Locality } from './transit/index.js'
 import { APP_VERSION } from './version.js'
 
@@ -29,9 +31,13 @@ const places = createPlacesProvider()
 const placesStore = new PersistentMap<StoredPlaces>(join(stateDir, `places.${places.name}.v2.json`))
 const destinations = new DestinationService({ reachability, weather, places, placesStore })
 
-serve({ fetch: createApp({ corsOrigins, reachability, destinations }).fetch, port }, (info) => {
+const ai = createAiProvider()
+const verdicts = new VerdictService({ destinations, ai })
+
+serve({ fetch: createApp({ corsOrigins, reachability, destinations, verdicts }).fetch, port }, (info) => {
   console.log(
     `Wander Buddy server v${APP_VERSION} on :${info.port} · transit=${transit.name} locality=${locality.name} ` +
-      `weather=${weather.name} places=${places.name} · ${localityStore.size} known station localities`,
+      `weather=${weather.name} places=${places.name} ai=${ai ? `${ai.name}:${ai.model}` : 'none'} · ` +
+      `${localityStore.size} known station localities`,
   )
 })

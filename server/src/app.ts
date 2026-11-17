@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { DestinationService } from './destinations.js'
 import type { ReachabilityQuery, ReachabilityService } from './reachability.js'
+import type { VerdictService } from './verdict.js'
 import { isValidDateTime, todayIn, zonedTimeToUtc } from './time.js'
 import { UpstreamError } from './transit/types.js'
 import { APP_VERSION } from './version.js'
@@ -21,7 +22,12 @@ export const DEFAULT_CORS_ORIGINS = ['https://wander-buddy.zebaro.dev', 'http://
 export const MAX_MINUTES = { min: 15, max: 180, default: 120 }
 
 export function createApp(
-  options: { corsOrigins?: string[]; reachability?: ReachabilityService; destinations?: DestinationService } = {},
+  options: {
+    corsOrigins?: string[]
+    reachability?: ReachabilityService
+    destinations?: DestinationService
+    verdicts?: VerdictService
+  } = {},
 ) {
   const app = new Hono()
 
@@ -94,6 +100,19 @@ export function createApp(
         const { result, cached } = await dest.destinations(parsed.query, { villages: parsed.villages })
         c.header('x-cache', cached ? 'HIT' : 'MISS')
         return c.json({ ok: true, provider: reach.providerName, ...result })
+      })
+    }
+
+    // The AI verdict over the best towns: GET /api/verdict?<search>. Never fails because of the AI:
+    // without it (no key, down, invalid answer) `verdict` is null and `fallback` is the formula's ranking.
+    const verdicts = options.verdicts
+    if (verdicts) {
+      api.get('/verdict', async (c) => {
+        const parsed = await parseSearch(c.req.query())
+        if ('error' in parsed) return c.json(parsed.error, parsed.status)
+        const { result, cached } = await verdicts.verdict(parsed.query)
+        c.header('x-cache', cached ? 'HIT' : 'MISS')
+        return c.json({ ok: true, ...result })
       })
     }
   }

@@ -40,8 +40,8 @@ a free Saturday, and no idea which of the towns around you are worth the trip.
 | 🚆 Reachability | towns reachable by regional transport ([Transitous](https://transitous.org)), swappable source | ✅ done |
 | 🌤️ Enrichment | weather ([Open-Meteo](https://open-meteo.com)) and places ([OpenTripMap](https://opentripmap.io)) at the town centre | ✅ done |
 | 🧮 Scoring | own formula: trip, weather, places → 0-100 ([`docs/scoring.md`](docs/scoring.md)) | ✅ done |
-| 🤖 AI verdict | top 3, plan for the day, JSON schema with a fallback | ⏳ next |
-| 🗺️ UI | map (Leaflet + OSM), character, quest | 🔜 |
+| 🤖 AI verdict | top 3, plan for the day as a quest, checked JSON with a fallback ([`docs/ai-verdict.md`](docs/ai-verdict.md)) | ✅ done |
+| 🗺️ UI | map (Leaflet + OSM), character, quest | ⏳ next |
 | 📏 Measurements | ~10 routes checked against bahn.de, response time with and without cache | 🔜 |
 
 ## 🛠️ Tech stack
@@ -92,6 +92,8 @@ The [`VERSION`](VERSION) file is the only place the version lives:
 │       ├── reachability.ts  stops → towns, caching (any data source)
 │       ├── destinations.ts  towns + weather + places + score
 │       ├── scoring.ts       the scoring formula (pure function)
+│       ├── verdict.ts       candidates → AI → checked verdict or fallback
+│       ├── ai/              the verdict schema, the AI interface + Groq
 │       ├── enrichment/      weather and places sources: the interfaces + Open-Meteo, OpenTripMap
 │       ├── transit/         data sources: the interfaces + Transitous
 │       ├── version.ts       reads VERSION
@@ -146,6 +148,7 @@ Every response is JSON with an `ok` flag:
 | `GET` | `/api/stations?q=Fulda` | up to 5 matching stations 🚉 |
 | `GET` | `/api/reachable?from=Fulda&date=2026-11-21&time=09:00&maxMinutes=120` | towns reachable by regional transport 🗺️ |
 | `GET` | `/api/destinations?…` (same parameters) | the same towns + weather 🌤️ + places 🏰 + a score 🧮, best first |
+| `GET` | `/api/verdict?…` (same parameters) | the AI verdict over the best 5: top 3, comparison, warnings, a quest, the character 🤖 |
 
 `/api/reachable` takes `from=<place>` or `lat=…&lon=…`; `date`/`time` are Europe/Berlin (default: today 09:00);
 `maxMinutes` 15-180 (default 120); `villages=true` also lists villages. Each town comes with minutes (waiting
@@ -165,7 +168,8 @@ CORS allows `https://wander-buddy.zebaro.dev` and `http://localhost:5173` (overr
 town centre, `sightsTotal` (notable sights around in all) and `score` - 0-100 with its parts (trip, weather, places),
 by formula 3.1 in [`docs/scoring.md`](docs/scoring.md). Towns come best score first.
 
-New endpoints are added step by step (AI verdict).
+`/api/verdict` never fails because of the AI: without a key, when the model is down or answers wrongly twice,
+`verdict` is `null`, `ai.status` says why, and `fallback` is the ranking by score.
 
 ## 🔄 CI/CD
 
