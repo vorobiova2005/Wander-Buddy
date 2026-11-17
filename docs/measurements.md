@@ -49,8 +49,10 @@ What the differences are:
 
 ## 2. Speed: a new search vs the same search again
 
-What a visit asks, in this order: the towns (`/api/reachable`), towns with weather, places and score
-(`/api/destinations`), the AI verdict (`/api/verdict`). Search: Fulda, Sat 28.11.2026, up to 120 min.
+The web app asks `/api/destinations` (the towns with weather, places and score) and then `/api/verdict` (the AI);
+`/api/destinations` computes the towns with the same code as `/api/reachable`. To see the parts, the measurement asks
+`/api/reachable` first, so the `/api/destinations` row is the enrichment alone and the three rows add up to a whole
+search. Search: Fulda, Sat 28.11.2026, up to 120 min.
 
 - **New search** - a departure time nobody asked before: the answer is computed (Transitous, Open-Meteo,
   OpenTripMap, Groq). Station → town and places stay known from earlier searches, as for a real user.
@@ -67,8 +69,8 @@ What a visit asks, in this order: the towns (`/api/reachable`), towns with weath
 | `/api/destinations` | 726 ms | 1.1 s | 57 ms - 1.1 s | 3 | 48 ms | 47 ms | 42 - 67 ms | 30 |
 | `/api/verdict` (AI) | 2.5 s | 2.5 s | 2.1 - 2.7 s | 3 | 42 ms | 39 ms | 34 - 63 ms | 30 |
 
-A whole new search (towns → details → verdict) takes **about 3.6 s**; the same search again about **0.13 s**
-(≈ 28 times faster). Every verdict was checked and accepted on the first try (`ai.status = ok`).
+A whole new search (towns → details → verdict, the sum of the means) takes **about 3.5 s**; the same search again
+about **0.13 s** (≈ 27 times faster). Every verdict was checked and accepted on the first try (`ai.status = ok`).
 
 ### The worst case: an empty server (nothing known yet)
 
