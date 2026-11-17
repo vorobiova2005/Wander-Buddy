@@ -3,8 +3,10 @@ import type { Search } from '../api/client'
 import { searchParams } from '../api/client'
 
 /**
- * Screens live in the URL hash (#/results?from=Fulda&date=…): the back button works, a reload keeps the screen,
- * and a search can be sent to a friend. The server caches the answers, so coming back is instant.
+ * Screens live in clean URLs (/results?from=Fulda&date=…, /quest/hunfeld?…, /progress) through the History API:
+ * the back button works, a reload keeps the screen, a search can be sent to a friend. The web server answers every
+ * path with index.html (web/nginx.conf, Vite in development); the server caches the answers, so coming back is
+ * instant. Old links with "#/" are moved to the clean URL on load.
  */
 export type Route =
   | { name: 'search' }
@@ -30,8 +32,10 @@ export function readSearch(p: URLSearchParams): Search | null {
   return from ? { from, date, time, maxMinutes } : null
 }
 
-export function parseRoute(hash: string): Route {
-  const [path, query = ''] = hash.replace(/^#/, '').split('?')
+/** "/results?from=…" (a path with its query) → the screen. Anything unknown → the search. */
+export function parseRoute(url: string): Route {
+  const [rawPath, query = ''] = url.replace(/^#/, '').split('?')
+  const path = rawPath.replace(/\/+$/, '') || '/'
   const params = new URLSearchParams(query)
   if (path === '/progress') return { name: 'progress' }
   const search = readSearch(params)
@@ -41,56 +45,66 @@ export function parseRoute(hash: string): Route {
   return { name: 'search' }
 }
 
-export function routeHash(route: Route): string {
+export function routeUrl(route: Route): string {
   switch (route.name) {
     case 'search':
-      return '#/'
+      return '/'
     case 'progress':
-      return '#/progress'
+      return '/progress'
     case 'results':
-      return `#/results?${searchParams(route.search)}`
+      return `/results?${searchParams(route.search)}`
     case 'quest':
-      return `#/quest/${encodeURIComponent(route.cityId)}?${searchParams(route.search)}`
+      return `/quest/${encodeURIComponent(route.cityId)}?${searchParams(route.search)}`
   }
 }
 
+const here = () => window.location.pathname + window.location.search
 const LAST_RESULTS = 'wb.lastResults'
+const scrollPositions = new Map<string, number>()
 
 export function navigate(route: Route) {
-  const hash = routeHash(route)
+  const url = routeUrl(route)
   if (route.name === 'results' || route.name === 'quest') {
     try {
-      sessionStorage.setItem(LAST_RESULTS, routeHash({ name: 'results', search: route.search }))
+      sessionStorage.setItem(LAST_RESULTS, routeUrl({ name: 'results', search: route.search }))
     } catch {
       // no storage - the Map tab then leads to the search
     }
   }
-  scrollPositions.set(window.location.hash, window.scrollY)
-  if (window.location.hash !== hash) window.location.hash = hash
+  scrollPositions.set(here(), window.scrollY)
+  if (here() !== url) {
+    window.history.pushState(null, '', url)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
   // Back to the results from a quest: the same place in the list; a new screen: the top.
-  const y = scrollPositions.get(hash) ?? 0
+  const y = scrollPositions.get(url) ?? 0
   window.scrollTo({ top: 0 })
   if (y > 0) setTimeout(() => window.scrollTo({ top: y }), 60)
 }
 
-const scrollPositions = new Map<string, number>()
-
 /** The results of the last search in this tab - where the "Map" tab leads. */
 export function lastResults(): Route | null {
   try {
-    const hash = sessionStorage.getItem(LAST_RESULTS)
-    return hash ? parseRoute(hash) : null
+    const url = sessionStorage.getItem(LAST_RESULTS)
+    return url ? parseRoute(url) : null
   } catch {
     return null
   }
 }
 
+/** A link from the hash days (/#/results?…) becomes the clean URL, without a new history entry. */
+export function upgradeHashUrl() {
+  if (window.location.hash.startsWith('#/')) {
+    window.history.replaceState(null, '', window.location.hash.slice(1))
+  }
+}
+
 function subscribe(listener: () => void) {
-  window.addEventListener('hashchange', listener)
-  return () => window.removeEventListener('hashchange', listener)
+  window.addEventListener('popstate', listener)
+  return () => window.removeEventListener('popstate', listener)
 }
 
 export function useRoute(): Route {
-  const hash = useSyncExternalStore(subscribe, () => window.location.hash, () => '')
-  return parseRoute(hash)
+  const url = useSyncExternalStore(subscribe, here, () => '/')
+  return parseRoute(url)
 }

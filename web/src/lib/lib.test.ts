@@ -4,7 +4,7 @@ import { bahnSearchUrl } from './bahn'
 import { chooseMood, pickLine } from './mood'
 import { earnedBadges, levelOf, levelStart, toggleStep, totalXp, visitedTowns, type Progress, type QuestInfo } from './progress'
 import { generatedQuest, isFoodStep, questFor, type QuestWords } from './quest'
-import { parseRoute, routeHash } from './router'
+import { parseRoute, routeUrl } from './router'
 import { addMinutes, shortDay, todayBerlin, weekendDays } from './time'
 import { weatherKind } from './weather'
 
@@ -151,16 +151,23 @@ describe('quest', () => {
 describe('router', () => {
   const search = { from: 'Fulda', date: '2026-11-21', time: '09:00', maxMinutes: 120 }
   it('keeps a search in the URL and reads it back', () => {
-    expect(parseRoute(routeHash({ name: 'results', search }))).toEqual({ name: 'results', search })
-    expect(parseRoute(routeHash({ name: 'quest', search, cityId: 'hunfeld' }))).toEqual({ name: 'quest', search, cityId: 'hunfeld' })
+    expect(parseRoute(routeUrl({ name: 'results', search }))).toEqual({ name: 'results', search })
+    expect(parseRoute(routeUrl({ name: 'quest', search, cityId: 'hunfeld' }))).toEqual({ name: 'quest', search, cityId: 'hunfeld' })
     const point = { from: '', lat: 50.55, lon: 9.68, date: '2026-11-21', time: '09:00', maxMinutes: 60 }
-    expect(parseRoute(routeHash({ name: 'results', search: point }))).toEqual({ name: 'results', search: point })
+    expect(parseRoute(routeUrl({ name: 'results', search: point }))).toEqual({ name: 'results', search: point })
   })
 
   it('falls back to the search screen for a broken link', () => {
-    expect(parseRoute('#/results?from=Fulda&date=21.11&time=09:00&maxMinutes=120')).toEqual({ name: 'search' })
-    expect(parseRoute('#/results?from=Fulda&date=2026-11-21&time=09:00&maxMinutes=999')).toEqual({ name: 'search' })
-    expect(parseRoute('#/nowhere')).toEqual({ name: 'search' })
+    expect(parseRoute('/results?from=Fulda&date=21.11&time=09:00&maxMinutes=120')).toEqual({ name: 'search' })
+    expect(parseRoute('/results?from=Fulda&date=2026-11-21&time=09:00&maxMinutes=999')).toEqual({ name: 'search' })
+    expect(parseRoute('/nowhere')).toEqual({ name: 'search' })
+  })
+
+  it('makes clean URLs and still reads the old #/ ones', () => {
+    expect(routeUrl({ name: 'results', search })).toBe('/results?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120')
+    expect(routeUrl({ name: 'progress' })).toBe('/progress')
+    expect(parseRoute('#/progress')).toEqual({ name: 'progress' })
+    expect(parseRoute('/progress/')).toEqual({ name: 'progress' })
   })
 })
 

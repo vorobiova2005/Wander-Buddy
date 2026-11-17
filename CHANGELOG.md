@@ -2,6 +2,12 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [0.5.1] - 2026-11-17
+
+### 🔧 Changed
+- 🔗 Clean URLs instead of `#/` ones: `/results?from=…`, `/quest/<town>?…`, `/progress`. Old `#/` links still open
+  and move to the clean URL. An end-to-end test checks deep links, reload, the old links and the back button.
+
 ## [0.5.0] - 2026-11-17
 
 ### ✨ Added

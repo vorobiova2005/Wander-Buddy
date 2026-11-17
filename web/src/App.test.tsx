@@ -21,18 +21,18 @@ beforeEach(() => {
   sessionStorage.clear()
   resetProgressCache()
   clearTripCache()
-  window.location.hash = ''
+  window.history.replaceState(null, '', '/')
   window.scrollTo = vi.fn() as unknown as typeof window.scrollTo
   vi.stubGlobal('fetch', vi.fn(fakeApi()))
 })
 afterEach(() => vi.unstubAllGlobals())
 
-const go = (hash: string) =>
+const go = (url: string) =>
   act(() => {
-    window.location.hash = hash
-    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    window.history.pushState(null, '', url)
+    window.dispatchEvent(new PopStateEvent('popstate'))
   })
-const RESULTS = '#/results?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120'
+const RESULTS = '/results?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120'
 
 describe('search screen', () => {
   it('greets with Вандер and credits the data sources as their licences require', () => {
@@ -49,7 +49,7 @@ describe('search screen', () => {
     render(<App />)
     fireEvent.click(screen.getByRole('button', { name: 'Знайти поїздки' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Впиши, звідки рушаємо')
-    expect(window.location.hash).toBe('')
+    expect(window.location.pathname).toBe('/')
   })
 
   it('suggests stations while typing and searches with the chosen one', async () => {
@@ -59,7 +59,7 @@ describe('search screen', () => {
     fireEvent.mouseDown(option)
     expect(screen.getByRole('combobox')).toHaveValue('Fulda')
     fireEvent.click(screen.getByRole('button', { name: 'Знайти поїздки' }))
-    expect(window.location.hash).toMatch(/^#\/results\?from=Fulda&date=\d{4}-\d{2}-\d{2}&time=09%3A00&maxMinutes=120$/)
+    expect(window.location.pathname + window.location.search).toMatch(/^\/results\?from=Fulda&date=\d{4}-\d{2}-\d{2}&time=09%3A00&maxMinutes=120$/)
   })
 
   it('makes Вандер sleepy for a departure before seven', () => {
@@ -112,7 +112,7 @@ describe('quest and progress', () => {
     go(RESULTS)
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: /^Місце 1: Hünfeld/ }))
-    expect(window.location.hash).toMatch(/^#\/quest\/hunfeld\?/)
+    expect(window.location.pathname).toBe('/quest/hunfeld')
     expect(await screen.findByRole('heading', { name: 'Квест: День у Hünfeld' })).toBeInTheDocument()
     expect(screen.getByText('0 / 3 · +0 XP')).toBeInTheDocument()
 
@@ -132,7 +132,7 @@ describe('quest and progress', () => {
     expect(screen.getByText('2 / 3 · +25 XP')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^10:00 Музей/, pressed: false }))
 
-    go('#/progress')
+    go('/progress')
     expect(await screen.findByRole('heading', { name: 'Прогрес' })).toBeInTheDocument()
     expect(screen.getByText('Рівень 1 · Новачок')).toBeInTheDocument()
     expect(screen.getByText('45 / 50 XP')).toBeInTheDocument()
@@ -156,7 +156,7 @@ describe('quest and progress', () => {
     HTMLDialogElement.prototype.showModal = vi.fn(function (this: HTMLDialogElement) {
       this.setAttribute('open', '')
     })
-    go('#/quest/hunfeld?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120')
+    go('/quest/hunfeld?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120')
     render(<App />)
     fireEvent.click(await screen.findByRole('button', { name: 'Позначити крок виконаним' }))
     expect(screen.getByRole('heading', { name: 'Новий рівень!' })).toBeInTheDocument()

@@ -33,7 +33,7 @@ test('choose a town, open its quest, complete steps - XP and the visited town ar
   await page.getByRole('button', { name: 'Знайти поїздки' }).click()
 
   // Results: the AI's top 3 and the map with its pins.
-  await expect(page).toHaveURL(/#\/results\?from=Fulda/)
+  await expect(page).toHaveURL(/\/results\?from=Fulda/)
   await expect(page.getByText('Готові до пригод? Ходімо!')).toBeVisible()
   const map = page.getByRole('region', { name: 'Мапа досяжних міст' })
   await expect(map).toBeVisible()
@@ -68,20 +68,20 @@ test('choose a town, open its quest, complete steps - XP and the visited town ar
 
 test('the layout fits the screen: no sideways scrolling, the right navigation', async ({ page }, info) => {
   const screens = [
-    '#/',
-    '#/results?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120',
-    '#/quest/hunfeld?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120',
-    '#/progress',
+    '/',
+    '/results?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120',
+    '/quest/hunfeld?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120',
+    '/progress',
   ]
   // The phone project also tries the narrowest common Android width.
   const widths = info.project.name === 'phone' ? [page.viewportSize()!.width, 360] : [page.viewportSize()!.width]
   for (const width of widths) {
     await page.setViewportSize({ width, height: page.viewportSize()!.height })
-    for (const hash of screens) {
-      await page.goto(`/${hash}`)
+    for (const url of screens) {
+      await page.goto(url)
       await page.waitForLoadState('networkidle')
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-      expect(overflow, `sideways scroll on ${hash} at ${width} px`).toBeLessThanOrEqual(0)
+      expect(overflow, `sideways scroll on ${url} at ${width} px`).toBeLessThanOrEqual(0)
     }
   }
   // Phone: the bottom bar, no top bar. Desktop: the top bar, no bottom bar.
@@ -92,4 +92,22 @@ test('the layout fits the screen: no sideways scrolling, the right navigation', 
   const viewport = page.viewportSize()!
   if (phone) expect(box.y + box.height).toBeGreaterThan(viewport.height - 2)
   else expect(box.y).toBeLessThan(80)
+})
+
+test('clean URLs: a deep link opens its screen, an old #/ link moves to the clean one, back works', async ({ page }) => {
+  await page.goto('/quest/hunfeld?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120')
+  await expect(page.getByRole('heading', { name: 'Квест: День у Hünfeld' })).toBeVisible()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Квест: День у Hünfeld' })).toBeVisible()
+
+  await page.goto('/#/progress')
+  await expect(page).toHaveURL(/\/progress$/)
+  await expect(page.getByRole('heading', { name: 'Прогрес' })).toBeVisible()
+
+  await page.goto('/results?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120')
+  await page.getByRole('button', { name: /^Місце 1: Hünfeld/ }).click()
+  await expect(page).toHaveURL(/\/quest\/hunfeld\?/)
+  await page.goBack()
+  await expect(page).toHaveURL(/\/results\?/)
+  await expect(page.getByRole('heading', { name: 'Топ-3 від Вандера' })).toBeVisible()
 })

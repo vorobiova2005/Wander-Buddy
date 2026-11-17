@@ -33,7 +33,9 @@ scrolling, the right navigation).
 | Квест | the AI's plan for its first town, for any other town a plan from its places (arrival, sights, a café, the way back); a step is done by tapping it (tap again to undo), "+XP" pops up; the way back opens on bahn.de |
 | Прогрес | level and title, XP to the next level, towns, quests, the visited towns on a map, 6 badges |
 
-The search is in the URL (`#/results?from=Fulda&date=…`): back works, a reload keeps the screen, a link can be shared.
+Clean URLs (History API): `/`, `/results?from=Fulda&date=…`, `/quest/<town>?…`, `/progress` - back works, a reload
+keeps the screen, a link can be shared; nginx answers every path with `index.html`. Old `/#/…` links are moved to
+the clean URL on load.
 Progress lives only in this browser (localStorage, no accounts).
 
 **Levels:** level n starts at 25·n·(n−1) XP (0, 50, 150, 300, 500, 750 …) - the first quest (≈ 90 XP) brings
