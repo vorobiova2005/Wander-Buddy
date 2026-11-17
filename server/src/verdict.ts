@@ -189,7 +189,38 @@ export function checkVerdict(raw: string, candidates: Candidate[]): { verdict: V
   if (questCity?.arrival && times[0] < questCity.arrival) {
     problems.push(`quest starts at ${times[0]}, before the arrival at ${questCity.arrival}`)
   }
+  problems.push(...idsInTexts(v, candidates))
   return problems.length ? { verdict: null, problems } : { verdict: v, problems: [] }
+}
+
+/**
+ * Ids belong in the id fields only: the texts are read by people. Finds a city id, a place id, or anything shaped
+ * like a place id (`otm:…`, by the prefixes of the given places) in a text field.
+ */
+function idsInTexts(v: Verdict, candidates: Candidate[]): string[] {
+  const texts: [string, string][] = [
+    ...v.top.map((t, i): [string, string] => [`top.${i}.reason`, t.reason]),
+    ['comparison', v.comparison],
+    ...v.warnings.map((w, i): [string, string] => [`warnings.${i}.text`, w.text]),
+    ['quest.title', v.quest.title],
+    ...v.quest.steps.flatMap((s, i): [string, string][] => [
+      [`quest.steps.${i}.title`, s.title],
+      [`quest.steps.${i}.description`, s.description],
+    ]),
+    ['character.line', v.character.line],
+  ]
+  const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const prefixes = [
+    ...new Set(candidates.flatMap((c) => c.places.filter((p) => p.id.includes(':')).map((p) => p.id.split(':')[0] + ':'))),
+  ]
+  const patterns = [
+    // City ids are lowercase slugs ("hunfeld"); names in the texts are written as names ("Hünfeld").
+    ...candidates.map((c) => new RegExp(`(?<![\\p{L}\\p{N}-])${escape(c.id)}(?![\\p{L}\\p{N}-])`, 'u')),
+    ...prefixes.map((p) => new RegExp(`(?<![\\p{L}\\p{N}])${escape(p)}\\S`, 'u')),
+  ]
+  return texts
+    .filter(([, text]) => patterns.some((re) => re.test(text)))
+    .map(([field]) => `${field}: an id in the text - write the name of the place or town, ids go only into the id fields`)
 }
 
 export const SYSTEM_PROMPT = `You are Wander Buddy, a cheerful travel companion for international exchange students in Germany.
@@ -197,7 +228,8 @@ You help to choose a day trip by regional transport (Deutschland-Ticket) and tur
 
 You get the candidates already ranked by a scoring formula: score 0-100 with parts trip, weather and places (0-1 each).
 Rules:
-- Choose ONLY among the candidates. Name destinations and places ONLY by the ids given (city "id", place "id").
+- Choose ONLY among the candidates. In the id fields ("id", "cityId", "placeId") use ONLY the ids given.
+- Texts are read by people: in every text write the NAMES of towns and places, never an id (no "otm:…", no "hunfeld").
 - Write every text in Ukrainian: friendly, short, concrete. The character line may be playful.
 - "top": up to 3 destinations, best first. Follow the ranking unless you have a clear reason; if you change it, say why.
 - "comparison": how the top destinations differ (trip time, weather, what there is to see).
@@ -205,6 +237,8 @@ Rules:
 - "quest": a plan for the day in the FIRST destination of "top" ("cityId" = its id). Steps start at the arrival time
   given for that city, local times HH:MM in order, 3-8 steps. Put "placeId" on a step at one of that city's places.
   Include a lunch or coffee break (a café if the city has one). "xp" 5-100 per step - more for a bigger effort.
+  The quest is a plan for the coming day: write step titles and descriptions as invitations in the imperative or the future tense
+  ("Загляньте до музею…", "Піднімемося на…"), never in the past tense ("Відвідали…").
 - "character": "mood" one of happy, excited, thoughtful, worried, and one "line" the companion says.
 Answer with ONE JSON object that matches this JSON Schema exactly, and nothing else:
 ${JSON.stringify(VERDICT_JSON_SCHEMA)}`

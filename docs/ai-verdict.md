@@ -53,7 +53,10 @@ System message (`SYSTEM_PROMPT` in `verdict.ts`), in English for the model, aski
 
 - the role: Wander Buddy, a cheerful companion for exchange students; day trips with the Deutschland-Ticket;
 - the candidates are already ranked by the formula (score and its parts are given);
-- choose only among them, name everything by id; follow the ranking unless there is a clear reason, and say it;
+- choose only among them and use only the given ids in the id fields; follow the ranking unless there is a clear
+  reason, and say it;
+- texts are for people: names of towns and places, never an id; quest steps are a plan for the day - imperative or
+  future tense, never past;
 - warnings about rain, cold, long trips and transfers, always a reminder to check the train back;
 - the quest starts at the arrival time in the first destination, has a lunch or coffee break, xp by effort;
 - answer with one JSON object matching the JSON Schema that follows.
@@ -253,7 +256,8 @@ fresh verdicts for the whole site - hence the cache (6 h), the shared in-flight 
 and the answer carries `enrichment` - the UI can tell "no weather" from "nice weather".
 
 **Structure checks beyond the schema** (cheap now, a base for the diploma's content checks): quest steps go forward
-in time and start no earlier than the arrival in the quest city.
+in time and start no earlier than the arrival in the quest city; no text field contains an id (a city id or a place
+id like `otm:…`) - ids go only into the id fields.
 
 **Swappable:** the source is `AiProvider` (`completeJson(messages)`), chosen with `AI_PROVIDER`; the model with
 `GROQ_MODEL` (default `openai/gpt-oss-120b`; also available: `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`).

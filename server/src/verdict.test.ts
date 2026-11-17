@@ -133,6 +133,32 @@ describe('checkVerdict', () => {
   })
 })
 
+describe('checkVerdict - ids stay in the id fields', () => {
+  const steps = goodVerdict.quest.steps
+  it.each([
+    ['a place id in a step', { ...goodVerdict, quest: { ...goodVerdict.quest, steps: [steps[0], { ...steps[1], description: 'Відвідайте otm:ZUSE - музей.' }, steps[2]] } }, /quest\.steps\.1\.description: an id/],
+    ['an unknown place id', { ...goodVerdict, comparison: 'Там є otm:N123.' }, /comparison: an id/],
+    ['a city id', { ...goodVerdict, top: [{ id: 'hunfeld', reason: 'hunfeld найближче.' }, goodVerdict.top[1]] }, /top\.0\.reason: an id/],
+    ['a city id in the character line', { ...goodVerdict, character: { mood: 'happy', line: 'До schluchtern!' } }, /character\.line/],
+  ])('rejects %s', (_name, bad, problem) => {
+    const { verdict, problems } = checkVerdict(JSON.stringify(bad), candidates)
+    expect(verdict).toBeNull()
+    expect(problems.join(' ')).toMatch(problem)
+  })
+
+  it('accepts names that only look like ids (Hünfeld, Hunfelder, a German word)', () => {
+    const ok = { ...goodVerdict, comparison: 'Hünfeld і Hunfelder Altstadt - поруч; Schlüchtern далі.' }
+    expect(checkVerdict(JSON.stringify(ok), candidates).problems).toEqual([])
+  })
+})
+
+describe('prompt: texts for people', () => {
+  it('asks for names in the texts and a plan in the future', () => {
+    expect(SYSTEM_PROMPT).toMatch(/never an id/)
+    expect(SYSTEM_PROMPT).toMatch(/never in the past tense/)
+  })
+})
+
 describe('checkVerdict - the day goes forward', () => {
   const withArrival = [{ ...candidates[0], arrival: '09:35' }, candidates[1]]
   const steps = goodVerdict.quest.steps
