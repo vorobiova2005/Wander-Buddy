@@ -28,6 +28,7 @@ export default function App() {
           <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} />
           {t(`app.server.${server}`)}
         </p>
+        <footer className="text-xs text-slate-500">{t('app.version', { version: __APP_VERSION__ })}</footer>
       </div>
     </main>
   )

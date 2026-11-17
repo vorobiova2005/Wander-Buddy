@@ -38,3 +38,15 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Both production images must build: a broken Dockerfile is caught here, not on release day.
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build server and web images
+        run: |
+          docker build --target server -t wander-buddy-server:ci .
+          docker build --target web -t wander-buddy-web:ci .

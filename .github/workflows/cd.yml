@@ -28,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      # Version from the tag; it must match the VERSION file.
+      # Version from the tag; it must match the VERSION file (the one version of web and server).
       - name: Set version
         run: |
           VERSION=${GITHUB_REF##*/}
@@ -53,12 +53,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Docker image
+      # Two images, one version: wander-buddy-server and wander-buddy-web.
+      - name: Build and push Docker images
         run: |
-          docker build -f Dockerfile -t $IMAGE:$VERSION .
-          docker push $IMAGE:$VERSION
-          docker tag $IMAGE:$VERSION $IMAGE:latest
-          docker push $IMAGE:latest
+          for TARGET in server web; do
+            docker build -f Dockerfile --target $TARGET -t $IMAGE-$TARGET:$VERSION .
+            docker push $IMAGE-$TARGET:$VERSION
+            docker tag $IMAGE-$TARGET:$VERSION $IMAGE-$TARGET:latest
+            docker push $IMAGE-$TARGET:latest
+          done
 
   deploy:
     runs-on: ubuntu-latest
@@ -82,7 +85,7 @@ jobs:
             docker-compose.yml
           target: /srv/wander-buddy/
 
-      - name: Deploy container via docker-compose
+      - name: Deploy containers via docker-compose
         uses: appleboy/ssh-action@v1
         # Values travel as environment variables (envs:), never pasted into the script text,
         # so a quote in a secret cannot break or inject into the remote shell.
@@ -103,7 +106,4 @@ jobs:
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
             docker compose -p wander-buddy up -d --pull always
-
-            # GITHUB_TOKEN dies with this job: do not leave it saved on the server.
-            docker logout ghcr.io
             docker image prune -f

@@ -12,6 +12,13 @@ describe('App', () => {
     expect(await screen.findByText("Сервер на зв'язку")).toBeInTheDocument()
   })
 
+  it('shows the version from the VERSION file', () => {
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
+    render(<App />)
+    expect(screen.getByText(`Версія ${__APP_VERSION__}`)).toBeInTheDocument()
+    expect(__APP_VERSION__).toMatch(/^\d+\.\d+\.\d+$/)
+  })
+
   it('reports a server that does not answer', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     render(<App />)
