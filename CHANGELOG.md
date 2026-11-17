@@ -2,6 +2,23 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [0.3.0] - 2026-11-17
+
+### ✨ Added
+- 🌤️🏰 `GET /api/destinations` - the reachable towns with the **weather on the trip day** (Open-Meteo: WMO code,
+  min/max °C, rain chance and mm, wind, sunshine hours; `out_of_range` beyond 15 days) and **places to see**
+  (OpenTripMap: sights rated 2+ and cafés, with category and rating), both looked up at the **town centre**.
+- 🔁 Weather and places sources are swappable like transport: `WeatherProvider` / `PlacesProvider`,
+  `WEATHER_PROVIDER` / `PLACES_PROVIDER` (`none` turns places off).
+- 💾 Found places are kept 30 days on the server's volume, so deploys do not spend the daily quota again.
+- 🛡️ Quota protection: places only for towns (not villages), at most 40 towns per search, requests spaced to
+  5 per second with retries, and a 10-minute pause for a source that keeps failing.
+- 🙏 Footer credits Open-Meteo and OpenTripMap.
+
+### 🔧 Changed
+- Each town now has a `center` (its place in OpenStreetMap): a suburban fastest station no longer means suburban
+  sights (Eisenach: old town instead of Hörschel).
+
 ## [0.2.0] - 2026-11-17
 
 ### ✨ Added
