@@ -21,6 +21,12 @@ type Props = {
   retryVerdict: () => void
 }
 
+/**
+ * The results map: a strip on phones; on a desktop the screen height minus the top bar (72), the gap above (40),
+ * the legend and a margin below - so the whole map with its legend is always in view, from 720 px high screens up.
+ */
+const MAP_HEIGHT = 'h-[240px] sm:h-[320px] lg:h-[calc(100dvh-176px)] lg:min-h-[400px] lg:max-h-[760px]'
+
 /** Screen 2 - where to go: the map, Вандер's verdict, the top 3, warnings and the other towns. */
 export function ResultsScreen({ search, destinations, verdict, retry, retryVerdict }: Props) {
   const { t } = useTranslation()
@@ -47,11 +53,11 @@ export function ResultsScreen({ search, destinations, verdict, retry, retryVerdi
 
   if (destinations.status === 'loading') {
     return (
-      <div className="space-y-6">
-        {header}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,640px)_1fr] lg:gap-12">
-          <div className="h-[220px] rounded-lg border-2 border-line bg-primary-soft motion-safe:animate-pulse lg:h-[600px]" />
-          <div className="space-y-6">
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-12 xl:grid-cols-[minmax(0,640px)_1fr]">
+        <div className={`rounded-lg border-2 border-line bg-primary-soft motion-safe:animate-pulse max-lg:order-2 ${MAP_HEIGHT}`} />
+        <div className="contents lg:block lg:space-y-6">
+          <div className="max-lg:order-1">{header}</div>
+          <div className="space-y-6 max-lg:order-3">
             <WaitingWander />
             <CardSkeleton />
           </div>
@@ -151,15 +157,17 @@ function Loaded({
   const gaps = data.enrichment.weather === 'unavailable' || data.enrichment.placesFailures > 0 || data.enrichment.placesPaused
 
   return (
-    <div className="space-y-6">
-      {header}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,640px)_1fr] lg:items-start lg:gap-12">
-        <div className="lg:sticky lg:top-[104px]">
-          <TripMap points={points} activeId={active} label={t('results.map')} className="h-[240px] sm:h-[320px] lg:h-[calc(100dvh-196px)] lg:max-h-[600px]" />
-          <MapLegend withOthers={showAll} />
-        </div>
+    // Phone: title, map, the rest - one column. Desktop: the map fills the left column from the top and stays in view
+    // (it always fits the screen height), the title and the decision scroll on the right.
+    <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-start lg:gap-12 xl:grid-cols-[minmax(0,640px)_1fr]">
+      <div className="max-lg:order-2 lg:sticky lg:top-[112px]">
+        <TripMap points={points} activeId={active} label={t('results.map')} className={MAP_HEIGHT} />
+        <MapLegend withOthers={showAll} />
+      </div>
 
-        <div className="space-y-6">
+      <div className="contents lg:block lg:space-y-6">
+        <div className="max-lg:order-1">{header}</div>
+        <div className="space-y-6 max-lg:order-3">
           <WanderSays mood={mood} line={line} />
 
           <section aria-labelledby="top3" className="space-y-3">

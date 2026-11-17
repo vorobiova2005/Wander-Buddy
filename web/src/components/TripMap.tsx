@@ -27,6 +27,8 @@ function icon(p: MapPoint, active: boolean) {
     html: `<span class="wb-pin ${cls}${active ? ' wb-pin--active' : ''}" style="width:${size}px;height:${size}px">${p.number ?? ''}</span>`,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
+    // The label sits beside the pin on either side (Leaflet mirrors this anchor for a label on the left).
+    tooltipAnchor: [size / 2 + 2, 0],
   })
 }
 
@@ -43,7 +45,8 @@ function FitBounds({ points, maxZoom }: { points: MapPoint[]; maxZoom: number })
     const fit = main.length >= 2 ? main : points
     if (fit.length === 0) return
     const bounds = L.latLngBounds(fit.map((p) => [p.lat, p.lon]))
-    map.fitBounds(bounds, { padding: [36, 36], maxZoom })
+    // Room around the pins for their labels, so no label is cut by the map's edge.
+    map.fitBounds(bounds, { padding: [64, 40], maxZoom })
     // Only when the set of points changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, key, maxZoom])
@@ -93,8 +96,8 @@ export function TripMap({
           >
             <Tooltip
               className="wb-label"
-              direction="right"
-              offset={[SIZE[p.kind] / 2, 0]}
+              // Right of the pin in the left half of the map, left of it in the right half: never off the edge.
+              direction="auto"
               permanent={p.kind !== 'dot'}
             >
               {p.label}

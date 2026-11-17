@@ -155,106 +155,108 @@ function CityQuest({
   const points = quest ? questPoints(city, quest, done) : []
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[440px_1fr] lg:items-start lg:gap-x-12">
-      <header className="space-y-3 lg:col-start-1">
-        <BackLink onClick={() => navigate({ name: 'results', search })}>{t('quest.back')}</BackLink>
-        <div className="flex items-start justify-between gap-3">
-          <h1 className="min-w-0 text-[28px] leading-[34px] font-bold break-words">{city.name}</h1>
-          <Chip tone="primary" className="mt-1">
-            {formatScore(city.score.total)} {t('unit.score')}
-          </Chip>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <Chip>
-            <span aria-hidden>🚆</span>
-            {duration(city.minutes)} · {t('unit.transfers', { count: city.transfers })}
-          </Chip>
-          <Chip>
-            <span aria-hidden>🕘</span>
-            {t('results.arrival', { time: localTime(city.arrival) })}
-          </Chip>
-          <WeatherChip city={city} enrichment={data.enrichment} />
-          {city.weather && city.weather.sunshineHours > 0 && (
-            <Chip>
-              <span aria-hidden>🌞</span>
-              {t('unit.sunshine', { h: Math.round(city.weather.sunshineHours) })}
+    // Phone: one column - the town, Вандер, the steps, the buttons, the map. Desktop: the town, Вандер and the buttons
+    // stay in view on the left; the steps and their map scroll on the right.
+    <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[400px_1fr] lg:items-start lg:gap-12 xl:grid-cols-[440px_1fr]">
+      <div className="contents lg:sticky lg:top-[112px] lg:block lg:space-y-6">
+        <header className="space-y-3 max-lg:order-1">
+          <BackLink onClick={() => navigate({ name: 'results', search })}>{t('quest.back')}</BackLink>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="min-w-0 text-[28px] leading-[34px] font-bold break-words">{city.name}</h1>
+            <Chip tone="primary" className="mt-1">
+              {formatScore(city.score.total)} {t('unit.score')}
             </Chip>
-          )}
-          {city.sightsTotal !== null && city.sightsTotal > 0 && (
+          </div>
+          <div className="flex flex-wrap gap-1.5">
             <Chip>
-              <span aria-hidden>🏰</span>
-              {t('unit.places', { count: city.sightsTotal })}
+              <span aria-hidden>🚆</span>
+              {duration(city.minutes)} · {t('unit.transfers', { count: city.transfers })}
             </Chip>
-          )}
-        </div>
-      </header>
-
-      <div className="lg:col-start-1">{quest ? <WanderSays mood={mood} line={line} /> : <WaitingWander />}</div>
-
-      <section aria-labelledby="quest-title" className="space-y-3 lg:col-start-2 lg:row-span-5 lg:row-start-1">
-        {quest ? (
-          <>
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="quest-title" className="min-w-0 text-[17px] leading-[22px] font-medium">
-                {t('quest.title', { title: quest.title })}
-              </h2>
-              <span className="relative shrink-0">
-                <Chip tone="accent" className="font-bold">
-                  {t('quest.count', { done: doneCount, total: quest.steps.length, xp: earned })}
-                </Chip>
-                <span role="status" className="pointer-events-none absolute -top-7 right-0">
-                  {gain && (
-                    <span
-                      key={gain.n}
-                      className="block rounded-full bg-accent px-2 text-[13px] leading-5 font-extrabold text-ink motion-safe:animate-[rise_1.6s_ease-out_forwards]"
-                    >
-                      +{gain.xp} XP
-                    </span>
-                  )}
-                </span>
-              </span>
-            </div>
-            {!allDone && <p className="text-[13px] leading-[18px] text-ink-muted">{t('quest.hint')}</p>}
-            <ol className="space-y-2.5">
-              {quest.steps.map((step, i) => (
-                <StepRow key={`${i}-${step.time}`} step={step} done={done(i)} onToggle={() => toggle(i)} />
-              ))}
-            </ol>
-            <p className="text-[13px] leading-[18px] text-ink-muted">
-              {quest.byAi ? t('quest.byAi') : verdict.status === 'ok' && v ? t('quest.byWander') : t('quest.byWanderNoAi')}
+            <Chip>
+              <span aria-hidden>🕘</span>
+              {t('results.arrival', { time: localTime(city.arrival) })}
+            </Chip>
+            <WeatherChip city={city} enrichment={data.enrichment} />
+            {city.weather && city.weather.sunshineHours > 0 && (
+              <Chip>
+                <span aria-hidden>🌞</span>
+                {t('unit.sunshine', { h: Math.round(city.weather.sunshineHours) })}
+              </Chip>
+            )}
+            {city.sightsTotal !== null && city.sightsTotal > 0 && (
+              <Chip>
+                <span aria-hidden>🏰</span>
+                {t('unit.places', { count: city.sightsTotal })}
+              </Chip>
+            )}
+          </div>
+        </header>
+        <div className="max-lg:order-2">{quest ? <WanderSays mood={mood} line={line} /> : <WaitingWander />}</div>
+        <div className="space-y-3 max-lg:order-4">
+          {allDone ? (
+            <p role="status" className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-success/15 px-6 font-bold text-ink">
+              {t('quest.allDone')}
             </p>
-          </>
-        ) : (
-          <>
-            <h2 id="quest-title" className="sr-only">
-              {t('quest.title', { title: city.name })}
-            </h2>
-            <CardSkeleton count={4} />
-          </>
-        )}
-      </section>
-
-      <div className="space-y-3 lg:col-start-1">
-        {allDone ? (
-          <p role="status" className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-success/15 px-6 font-bold text-ink">
-            {t('quest.allDone')}
-          </p>
-        ) : (
-          <Button className="w-full" disabled={!quest} onClick={() => nextIndex >= 0 && toggle(nextIndex)}>
-            {t('quest.markNext')}
-          </Button>
-        )}
-        <LinkButton className="w-full" href={bahnSearchUrl(city.station.name, home, search.date, lastTime)}>
-          {t('quest.bahn')}
-          <span aria-hidden>↗</span>
-        </LinkButton>
-      </div>
-
-      {quest && (
-        <div className="lg:col-start-1">
-          <TripMap points={points} label={t('quest.map')} className="h-[220px] lg:h-[300px]" />
+          ) : (
+            <Button className="w-full" disabled={!quest} onClick={() => nextIndex >= 0 && toggle(nextIndex)}>
+              {t('quest.markNext')}
+            </Button>
+          )}
+          <LinkButton className="w-full" href={bahnSearchUrl(city.station.name, home, search.date, lastTime)}>
+            {t('quest.bahn')}
+            <span aria-hidden>↗</span>
+          </LinkButton>
         </div>
-      )}
+      </div>
+      <div className="contents lg:block lg:space-y-6">
+        <section aria-labelledby="quest-title" className="space-y-3 max-lg:order-3">
+          {quest ? (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <h2 id="quest-title" className="min-w-0 text-[17px] leading-[22px] font-medium">
+                  {t('quest.title', { title: quest.title })}
+                </h2>
+                <span className="relative shrink-0">
+                  <Chip tone="accent" className="font-bold">
+                    {t('quest.count', { done: doneCount, total: quest.steps.length, xp: earned })}
+                  </Chip>
+                  <span role="status" className="pointer-events-none absolute -top-7 right-0">
+                    {gain && (
+                      <span
+                        key={gain.n}
+                        className="block rounded-full bg-accent px-2 text-[13px] leading-5 font-extrabold text-ink motion-safe:animate-[rise_1.6s_ease-out_forwards]"
+                      >
+                        +{gain.xp} XP
+                      </span>
+                    )}
+                  </span>
+                </span>
+              </div>
+              {!allDone && <p className="text-[13px] leading-[18px] text-ink-muted">{t('quest.hint')}</p>}
+              <ol className="space-y-2.5">
+                {quest.steps.map((step, i) => (
+                  <StepRow key={`${i}-${step.time}`} step={step} done={done(i)} onToggle={() => toggle(i)} />
+                ))}
+              </ol>
+              <p className="text-[13px] leading-[18px] text-ink-muted">
+                {quest.byAi ? t('quest.byAi') : verdict.status === 'ok' && v ? t('quest.byWander') : t('quest.byWanderNoAi')}
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 id="quest-title" className="sr-only">
+                {t('quest.title', { title: city.name })}
+              </h2>
+              <CardSkeleton count={4} />
+            </>
+          )}
+        </section>
+        {quest && (
+          <div className="max-lg:order-5">
+            <TripMap points={points} label={t('quest.map')} className="h-[220px] lg:h-[340px]" />
+          </div>
+        )}
+      </div>
     </div>
   )
 }
