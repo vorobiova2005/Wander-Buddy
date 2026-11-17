@@ -12,6 +12,16 @@ describe('App', () => {
     expect(await screen.findByText("Сервер на зв'язку")).toBeInTheDocument()
   })
 
+  it('credits the data sources as their licences require', () => {
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
+    render(<App />)
+    expect(screen.getByRole('link', { name: 'Розклади: Transitous' })).toHaveAttribute('href', 'https://transitous.org/sources/')
+    expect(screen.getByRole('link', { name: '© учасники OpenStreetMap' })).toHaveAttribute(
+      'href',
+      'https://www.openstreetmap.org/copyright',
+    )
+  })
+
   it('shows the version from the VERSION file', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
     render(<App />)

@@ -28,7 +28,18 @@ export default function App() {
           <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} />
           {t(`app.server.${server}`)}
         </p>
-        <footer className="text-xs text-slate-500">{t('app.version', { version: __APP_VERSION__ })}</footer>
+        <footer className="space-y-1 text-xs text-slate-500">
+          <p>{t('app.version', { version: __APP_VERSION__ })}</p>
+          {/* Required by the data licences: Transitous sources page and OpenStreetMap credit. */}
+          <p className="flex flex-wrap gap-x-3">
+            <a className="underline" href="https://transitous.org/sources/" target="_blank" rel="noreferrer">
+              {t('app.attribution.transit')}
+            </a>
+            <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+              {t('app.attribution.osm')}
+            </a>
+          </p>
+        </footer>
       </div>
     </main>
   )

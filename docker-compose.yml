@@ -11,6 +11,9 @@ services:
       - GROQ_API_KEY
       - OPENTRIPMAP_API_KEY
       - TZ=Europe/Berlin
+    volumes:
+      # Known station → town answers; a named volume keeps the image's owner (node).
+      - wander-buddy-state:/app/state
     # Not published on the host: only the web container reaches it (/api proxy).
     expose:
       - "8080"
@@ -27,3 +30,6 @@ services:
         condition: service_healthy
     ports:
       - "${SERVER_PORT:-8080}:80"
+
+volumes:
+  wander-buddy-state:

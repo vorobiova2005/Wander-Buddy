@@ -23,8 +23,11 @@ RUN npm ci --omit=dev -w server
 
 FROM node:24-alpine AS server
 ENV NODE_ENV=production \
-    PORT=8080
+    PORT=8080 \
+    STATE_DIR=/app/state
 WORKDIR /app/server
+# Station → town answers survive restarts here (a named volume in docker-compose.yml).
+RUN mkdir -p /app/state && chown node:node /app/state
 # Same layout as the repository: server/dist/*.js reads ../../VERSION = /app/VERSION.
 COPY --from=server-deps /app/node_modules /app/node_modules
 COPY --from=build /app/VERSION /app/VERSION

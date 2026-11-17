@@ -37,8 +37,8 @@ a free Saturday, and no idea which of the towns around you are worth the trip.
 | Stage | What | State |
 | ----- | ---- | ----- |
 | 🧱 Skeleton | web + API containers, CI/CD, deploy | ✅ done |
-| 🚆 Reachability | towns reachable by regional transport ([Transitous](https://transitous.org)) | ⏳ next |
-| 🌤️ Enrichment | weather ([Open-Meteo](https://open-meteo.com)) and places ([OpenTripMap](https://opentripmap.io)) | 🔜 |
+| 🚆 Reachability | towns reachable by regional transport ([Transitous](https://transitous.org)), swappable source | ✅ done |
+| 🌤️ Enrichment | weather ([Open-Meteo](https://open-meteo.com)) and places ([OpenTripMap](https://opentripmap.io)) | ⏳ next |
 | 🧮 Scoring | own ranking formula with unit tests | 🔜 |
 | 🤖 AI verdict | top 3, plan for the day, JSON schema with a fallback | 🔜 |
 | 🗺️ UI | map (Leaflet + OSM), character, quest | 🔜 |
@@ -89,6 +89,8 @@ The [`VERSION`](VERSION) file is the only place the version lives:
 ├── ⚙️ server/               API server (Hono)
 │   └── src/
 │       ├── app.ts           routes, CORS and the JSON response format
+│       ├── reachability.ts  stops → towns, caching (any data source)
+│       ├── transit/         data sources: the interfaces + Transitous
 │       ├── version.ts       reads VERSION
 │       └── index.ts         entry point
 ├── 📚 docs/                 technical pages
@@ -138,9 +140,23 @@ Every response is JSON with an `ok` flag:
 | Method | Path | Answer |
 | ------ | ---- | ------ |
 | `GET` | `/api/health` | `{ "ok": true, "version": "0.1.0" }` - the server is alive 💚 |
+| `GET` | `/api/stations?q=Fulda` | up to 5 matching stations 🚉 |
+| `GET` | `/api/reachable?from=Fulda&date=2026-11-21&time=09:00&maxMinutes=120` | towns reachable by regional transport 🗺️ |
+
+`/api/reachable` takes `from=<place>` or `lat=…&lon=…`; `date`/`time` are Europe/Berlin (default: today 09:00);
+`maxMinutes` 15-180 (default 120); `villages=true` also lists villages. Each town comes with minutes (waiting
+included), transfers, arrival and the station. The `x-cache` header says `HIT` when the answer came from the cache.
+
+```bash
+curl "https://wander-buddy.zebaro.dev/api/reachable?from=Fulda&maxMinutes=120"
+# { "ok": true, "provider": "transitous", "origin": {...}, "cities": [
+#   { "id": "schluchtern", "name": "Schlüchtern", "kind": "town", "minutes": 42, "transfers": 0, ... }, ... ] }
+```
+
+🔁 The transport data source is swappable (`TRANSIT_PROVIDER`): see [`docs/data-sources.md`](docs/data-sources.md).
 
 CORS allows `https://wander-buddy.zebaro.dev` and `http://localhost:5173` (override with `CORS_ORIGINS`).
-New endpoints are added step by step (reachability, enrichment, scoring, AI verdict).
+New endpoints are added step by step (enrichment, scoring, AI verdict).
 
 ## 🔄 CI/CD
 

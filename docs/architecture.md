@@ -28,6 +28,9 @@
 - **Development** has the same shape: Vite serves the app on `:5173` and proxies `/api` to the server on `:8080`.
 - **Keys stay on the server.** The browser only talks to `/api`; every external call and every AI call is made
   by the server. Keys come from environment variables (`.env` locally, GitHub Actions secrets in production).
+- **Swappable data sources.** Transport data comes through `TransitProvider` / `LocalityResolver`
+  (`server/src/transit/`); switching the source is one new file and an env variable - [data-sources.md](data-sources.md).
+- **Lasting cache.** Station → town answers live in the `wander-buddy-state` volume (`/app/state`) and survive deploys.
 - **No accounts.** Player progress (experience, level, visited towns) lives in the browser's `localStorage`.
 
 ## One version
@@ -48,6 +51,9 @@ Defined in `server/src/app.ts`.
 | Outcome | Status | Body |
 | ------- | ------ | ---- |
 | success | 200 | `{ "ok": true, ...payload }` |
+| bad parameters | 400 | `{ "ok": false, "error": { "code": "bad_request", ... } }` |
+| origin not found | 404 | `{ "ok": false, "error": { "code": "origin_not_found", ... } }` |
+| data source down | 502 | `{ "ok": false, "error": { "code": "upstream_unavailable", ... } }` |
 | unknown route | 404 | `{ "ok": false, "error": { "code": "not_found", "message": "..." } }` |
 | unexpected failure | 500 | `{ "ok": false, "error": { "code": "internal", "message": "Internal server error" } }` |
 
