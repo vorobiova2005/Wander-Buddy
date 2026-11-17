@@ -122,6 +122,7 @@ Open http://localhost:5173. A green dot 🟢 means the app reaches the server.
 | `npm run check` | ✅ everything CI checks: lint, types, tests for web and server |
 | `npm run build` | 📦 production build of both parts |
 | `docker compose up --build` | 🐳 both production containers locally → http://localhost:8080 |
+| `npm run keys:check -w server` | 🔑 are the API keys in `.env` accepted? (prints verdicts and limits, never the keys) |
 
 ## 🔌 API
 
