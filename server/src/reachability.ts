@@ -20,6 +20,8 @@ export type City = {
   transfers: number
   arrival: string
   station: Station
+  /** The town centre (falls back to the station): where weather and places are looked up. */
+  center: Coordinates
 }
 
 export type Reachability = {
@@ -159,6 +161,7 @@ export class ReachabilityService {
         transfers: Math.max(0, stop.vehicles - 1),
         arrival: stop.arrival,
         station: { id: stop.id, name: stop.name, lat: stop.lat, lon: stop.lon },
+        center: town.center ?? { lat: stop.lat, lon: stop.lon },
       })
     })
 
@@ -248,13 +251,14 @@ export function slugify(name: string): string {
     .replace(/^-|-$/g, '')
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+/** Runs `fn` over `items` with at most `limit` running at once, keeping the order. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(items.length)
   let next = 0
   const worker = async () => {
     while (next < items.length) {
       const i = next++
-      out[i] = await fn(items[i])
+      out[i] = await fn(items[i], i)
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))

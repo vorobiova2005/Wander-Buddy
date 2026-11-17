@@ -6,6 +6,8 @@
     "version": "Версія {{version}}",
     "attribution": {
       "transit": "Розклади: Transitous",
+      "weather": "Погода: Open-Meteo.com",
+      "places": "Місця: OpenTripMap",
       "osm": "© учасники OpenStreetMap"
     },
     "server": {

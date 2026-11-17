@@ -35,6 +35,12 @@ export default function App() {
             <a className="underline" href="https://transitous.org/sources/" target="_blank" rel="noreferrer">
               {t('app.attribution.transit')}
             </a>
+            <a className="underline" href="https://open-meteo.com/" target="_blank" rel="noreferrer">
+              {t('app.attribution.weather')}
+            </a>
+            <a className="underline" href="https://opentripmap.io/" target="_blank" rel="noreferrer">
+              {t('app.attribution.places')}
+            </a>
             <a className="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
               {t('app.attribution.osm')}
             </a>

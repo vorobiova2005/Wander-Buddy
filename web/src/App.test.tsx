@@ -16,6 +16,8 @@ describe('App', () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
     render(<App />)
     expect(screen.getByRole('link', { name: 'Розклади: Transitous' })).toHaveAttribute('href', 'https://transitous.org/sources/')
+    expect(screen.getByRole('link', { name: 'Погода: Open-Meteo.com' })).toHaveAttribute('href', 'https://open-meteo.com/')
+    expect(screen.getByRole('link', { name: 'Місця: OpenTripMap' })).toHaveAttribute('href', 'https://opentripmap.io/')
     expect(screen.getByRole('link', { name: '© учасники OpenStreetMap' })).toHaveAttribute(
       'href',
       'https://www.openstreetmap.org/copyright',

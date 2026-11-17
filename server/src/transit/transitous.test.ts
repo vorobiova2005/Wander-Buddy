@@ -91,10 +91,41 @@ describe('Transitous', () => {
     expect(await client(f).localityAt({ lat: 50.58, lon: 8.66 })).toEqual({ name: 'Gießen', kind: 'village' })
   })
 
-  it('treats a city that is its own district as a city without a second request', async () => {
-    const f = fakeFetch({ '/api/v1/reverse-geocode': [{ ...fullda, areas: [{ name: 'Kassel', adminLevel: 6 }] }] })
-    expect(await client(f).localityAt({ lat: 51.3, lon: 9.4 })).toEqual({ name: 'Kassel', kind: 'city' })
-    expect(f).toHaveBeenCalledTimes(1)
+  it('treats a city that is its own district as a city and finds its centre', async () => {
+    const f = fakeFetch({
+      '/api/v1/reverse-geocode': [{ ...fullda, areas: [{ name: 'Kassel', adminLevel: 6 }] }],
+      '/api/v1/geocode': [{ name: 'Kassel', category: 'place_6', lat: 51.3157, lon: 9.498, areas: [{ name: 'Kassel', adminLevel: 6 }] }],
+    })
+    expect(await client(f).localityAt({ lat: 51.3, lon: 9.4 })).toEqual({
+      name: 'Kassel',
+      kind: 'city',
+      center: { lat: 51.3157, lon: 9.498 },
+    })
+  })
+
+  it('still knows a city that is its own district when the centre lookup fails', async () => {
+    const f = vi.fn(async (input: string | URL | Request) =>
+      new URL(String(input)).pathname === '/api/v1/reverse-geocode'
+        ? new Response(JSON.stringify([{ ...fullda, areas: [{ name: 'Kassel', adminLevel: 6 }] }]))
+        : new Response('busy', { status: 503 }),
+    )
+    expect(await client(f as unknown as ReturnType<typeof fakeFetch>).localityAt({ lat: 51.3, lon: 9.4 })).toEqual({
+      name: 'Kassel',
+      kind: 'city',
+    })
+  })
+
+  it('gives the town centre, not the station, so a suburban station still leads to the old town', async () => {
+    // Eisenach: the fastest station is in the suburb Hörschel; the town's place node is the centre.
+    const f = fakeFetch({
+      '/api/v1/reverse-geocode': [{ ...fullda, areas: [{ name: 'Wartburgkreis', adminLevel: 6 }, { name: 'Eisenach', adminLevel: 8 }] }],
+      '/api/v1/geocode': [
+        { name: 'Eisenach', category: 'municipality', lat: 50.97, lon: 10.3, areas: [{ name: 'Eisenach', adminLevel: 8 }] },
+        { name: 'Eisenach', category: 'town', lat: 50.9747, lon: 10.3194, areas: [{ name: 'Eisenach', adminLevel: 8 }] },
+      ],
+    })
+    const town = await client(f).localityAt({ lat: 50.986, lon: 10.193 })
+    expect(town).toEqual({ name: 'Eisenach', kind: 'town', center: { lat: 50.9747, lon: 10.3194 } })
   })
 
   it('turns an HTTP error into an UpstreamError', async () => {

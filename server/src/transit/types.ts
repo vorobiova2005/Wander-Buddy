@@ -39,7 +39,12 @@ export type ReachableQuery = {
 /** `city` - a city that is its own district (kreisfreie Stadt); `town` - a town; `village` - everything smaller. */
 export type LocalityKind = 'city' | 'town' | 'village'
 
-export type Locality = { name: string; kind: LocalityKind }
+export type Locality = {
+  name: string
+  kind: LocalityKind
+  /** The town's centre (its place node in OSM), when known: weather and places are looked up there. */
+  center?: Coordinates
+}
 
 export interface TransitProvider {
   readonly name: string

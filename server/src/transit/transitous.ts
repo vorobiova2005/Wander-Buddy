@@ -90,21 +90,36 @@ export class Transitous implements TransitProvider, LocalityResolver {
     const near = await this.get<Match[]>('/api/v1/reverse-geocode', { place: `${point.lat},${point.lon}`, type: 'STOP' })
     const municipality = near.map((m) => municipalityOf(m.areas)).find(Boolean)
     if (!municipality) return null
-    // A municipality on admin level 6 is a city that is its own district (Frankfurt, Kassel, Würzburg).
-    if (municipality.adminLevel < 8) return { name: municipality.name, kind: 'city' }
 
-    // Level 8: ask OSM whether this municipality is a town or a village.
-    const places = await this.get<Match[]>('/api/v1/geocode', {
-      text: municipality.name,
-      type: 'PLACE',
-      place: `${point.lat},${point.lon}`,
-      numResults: '5',
-    })
+    // The place itself in OSM: its category (town or village) and its centre.
+    let places: Match[]
+    try {
+      places = await this.get<Match[]>('/api/v1/geocode', {
+        text: municipality.name,
+        type: 'PLACE',
+        place: `${point.lat},${point.lon}`,
+        numResults: '5',
+      })
+    } catch (err) {
+      // A city that is its own district is a city anyway; only its centre is missing (the station stands in).
+      if (municipality.adminLevel < 8) return { name: municipality.name, kind: 'city' }
+      throw err
+    }
     const same = places.filter(
-      (p) => p.name === municipality.name && p.areas?.some((a) => a.name === municipality.name && a.adminLevel === 8),
+      (p) =>
+        p.name === municipality.name &&
+        p.areas?.some((a) => a.name === municipality.name && a.adminLevel === municipality.adminLevel),
     )
+    const settlement = same.find((p) => TOWN_CATEGORIES.has(p.category ?? '')) ?? same[0]
+    const center =
+      settlement && Number.isFinite(settlement.lat) && Number.isFinite(settlement.lon)
+        ? { lat: settlement.lat, lon: settlement.lon }
+        : undefined
+
+    // A municipality on admin level 6 is a city that is its own district (Frankfurt, Kassel, Würzburg).
+    if (municipality.adminLevel < 8) return { name: municipality.name, kind: 'city', center }
     const isTown = same.some((p) => TOWN_CATEGORIES.has(p.category ?? ''))
-    return { name: municipality.name, kind: isTown ? 'town' : 'village' }
+    return { name: municipality.name, kind: isTown ? 'town' : 'village', center }
   }
 
   private async get<T>(path: string, params: Record<string, string>): Promise<T> {
