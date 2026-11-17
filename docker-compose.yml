@@ -1,0 +1,13 @@
+services:
+  wander-buddy:
+    build: .
+    image: ghcr.io/vorobiova2005/wander-buddy:latest
+    container_name: wander-buddy
+    restart: unless-stopped
+    environment:
+      # Values come from the deploy step (GitHub Actions secrets), never from this file.
+      - GROQ_API_KEY
+      - OPENTRIPMAP_API_KEY
+      - TZ=Europe/Berlin
+    ports:
+      - "${SERVER_PORT:-8080}:8080"

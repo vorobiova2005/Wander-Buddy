@@ -1,0 +1,109 @@
+name: CD
+
+# A tag vX.Y.Z = a release = a deploy. A plain push to main only runs CI.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Two tags pushed close together deploy one after another, never interleaved
+# (otherwise an older build could overwrite :latest after a newer one).
+concurrency:
+  group: cd
+  cancel-in-progress: false
+
+jobs:
+  # The same checks as CI and as the local gate. A tag on a red commit stops here.
+  gate:
+    uses: ./.github/workflows/ci.yml
+
+  build-and-push:
+    needs: gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      # Version from the tag; it must match the VERSION file.
+      - name: Set version
+        run: |
+          VERSION=${GITHUB_REF##*/}
+          VERSION=${VERSION#v}
+          if [ "$VERSION" != "$(tr -d '[:space:]' < VERSION)" ]; then
+            echo "Tag v$VERSION does not match VERSION file ($(cat VERSION))" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # GHCR names must be lowercase: Wander-Buddy → wander-buddy
+      - name: Set image name
+        run: |
+          REPO_NAME=$(basename "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          OWNER_NAME=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE=ghcr.io/$OWNER_NAME/$REPO_NAME" >> $GITHUB_ENV
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -f Dockerfile -t $IMAGE:$VERSION .
+          docker push $IMAGE:$VERSION
+          docker tag $IMAGE:$VERSION $IMAGE:latest
+          docker push $IMAGE:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment:
+      name: prod
+    steps:
+      - name: Checkout only docker-compose.yml
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: docker-compose.yml
+          fetch-depth: 1
+
+      - name: Copy docker-compose
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: |
+            docker-compose.yml
+          target: /srv/wander-buddy/
+
+      - name: Deploy container via docker-compose
+        uses: appleboy/ssh-action@v1
+        # Values travel as environment variables (envs:), never pasted into the script text,
+        # so a quote in a secret cannot break or inject into the remote shell.
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENTRIPMAP_API_KEY: ${{ secrets.OPENTRIPMAP_API_KEY }}
+          SERVER_PORT: ${{ vars.SERVER_PORT }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN,GROQ_API_KEY,OPENTRIPMAP_API_KEY,SERVER_PORT
+          script: |
+            set -e
+            cd /srv/wander-buddy
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            docker compose -p wander-buddy up -d --pull always
+
+            # GITHUB_TOKEN dies with this job: do not leave it saved on the server.
+            docker logout ghcr.io
+            docker image prune -f

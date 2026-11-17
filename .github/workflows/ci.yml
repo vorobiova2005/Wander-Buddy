@@ -1,0 +1,40 @@
+name: CI
+
+# CI runs the same commands as the local gate (scripts/gate.py → `npm run check -w web|server`).
+# CD calls this workflow before building the image (workflow_call), so a tag on a red commit
+# never reaches the server.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Web - lint, typecheck, test
+        run: npm run check -w web
+
+      - name: Server - typecheck, test
+        run: npm run check -w server
+
+      - name: Build
+        run: npm run build
