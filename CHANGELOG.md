@@ -2,7 +2,7 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
-## [Unreleased]
+## [0.5.0] - 2026-11-17
 
 ### ✨ Added
 - 🗺️ **The web app** (step 07), built from the Figma mockups, for phones and desktops (≥ 1024 px: top bar, two
@@ -23,6 +23,9 @@ All notable changes. Versions follow [Semantic Versioning](https://semver.org); 
 - ♿ Accessibility: whole cards and steps are read, one status line for loading, AA contrast for small text,
   44 px touch targets, keyboard-friendly station list.
 - 🔤 Fonts Unbounded + Manrope served by the app itself (no Google request); the map loads in its own chunk.
+- 🖥️ Desktop layout checked from 1024 × 768 to 1920 × 1080: the results map with its legend always fits the screen
+  height and stays in view; on the quest screen the town, Вандер and the buttons stay in view, the steps and their map
+  scroll; map labels flip to the side with room, never cut by the map's edge.
 
 ### 🔧 Changed
 - 🤖 The AI verdict keeps ids out of its texts (names only) and writes the quest as a plan for the day; a text
