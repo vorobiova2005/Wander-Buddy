@@ -36,9 +36,10 @@ transfers equal on **10 / 10** (including the 2-transfer train + bus journey to 
 
 What the differences are:
 
-- **+5 min on the direct trains** (rows 1-4, 10): the same train, but Transitous' one-to-all search reports the
-  arrival a few minutes later than the scheduled time on bahn.de (it includes the time to the stop's exit). For a day
-  trip this errs on the safe side.
+- **+5 min on the direct trains** (rows 1-4, 10): the same train and line as on bahn.de, but Transitous' one-to-all
+  search gives an arrival exactly 5 minutes later. The constant offset suggests a fixed allowance added at the
+  destination by the routing engine; the cause is **not verified** here. For a day trip it errs on the safe side
+  (the user arrives earlier than shown, never later).
 - **Earlier arrivals** (rows 5, 6, 8, 9) are not errors: Wander Buddy counts a town reached at its **first** station,
   bahn.de was asked for the main station. Eisenach is reached at Hörschel (a stop inside Eisenach, 8 min earlier),
   Frankfurt at Frankfurt Süd, Würzburg at Würzburg-Zell. Weather and places are looked up at the town centre, not at
