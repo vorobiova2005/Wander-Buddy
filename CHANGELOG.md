@@ -2,6 +2,23 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [0.4.0] - 2026-11-17
+
+### ✨ Added
+- 🧮 **Scoring formula** (3.1): S = 100 · (0.4 · trip + 0.3 · weather + 0.3 · places), each part 0-1;
+  `/api/destinations` now gives every town a `score` with its parts and sorts the towns best first.
+  Unknown weather or places count as average and are flagged. Specification and a worked example:
+  `docs/scoring.md`.
+- 🏰 `sightsTotal` - how many notable sights a town has around its centre in all (Frankfurt 265, Kassel 100,
+  Sontra 1) - the scoring needs it to tell a small town from a city.
+- 🤖 `GET /api/verdict` - the AI verdict over the best 5 towns: top 3 with reasons, a comparison, warnings, a plan for
+  the day as a quest with xp, and a line of the companion character. Checked before it is shown (JSON, schema, every
+  id from the data, quest times in order and after the arrival); otherwise the ranking by score - never an error.
+  Prompt, schema and a real example: `docs/ai-verdict.md`.
+- 🔁 The AI source is swappable too: `AI_PROVIDER`, `GROQ_MODEL` (default `openai/gpt-oss-120b`).
+- 🛡️ Groq quota protection: verdicts cached 6 h, identical requests share one call, a 60-second pause after a
+  failure, little reasoning (`reasoning_effort: low`, ≈ 3 400 tokens per verdict, ~6 s).
+
 ## [0.3.0] - 2026-11-17
 
 ### ✨ Added
