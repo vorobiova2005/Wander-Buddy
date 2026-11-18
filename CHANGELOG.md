@@ -2,6 +2,38 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [0.6.0] - 2026-11-18
+
+After a review of the whole code: nothing a user does - or a broken link, a full storage, a slow AI - ends in a blank
+page or a wrong result any more.
+
+### ✨ Added
+- 🛟 An error screen instead of a blank page, with "Оновити сторінку" and "Почати прогрес заново".
+- 💾 A note on the quest and progress screens when the browser keeps nothing (private mode, storage blocked or full).
+- 🕘 "за часом Німеччини" next to the departure time when the device is in another time zone.
+- 🗂️ Each screen names the browser tab.
+
+### 🔧 Changed
+- 🔎 "Новий пошук" brings back the same search - town or "Я тут", day, time, limit - also after a shared link or a reload.
+- 📍 "Я тут": a town typed meanwhile wins over a late position; denied, too slow and no position each get their own advice.
+- 🗺️ Map: overlapping labels are hidden until there is room; town 1 always lies on top of town 3.
+- 🧭 The AI writes place names as on the map ("Kloster Schlüchtern"), in Ukrainian words; an answer with ё, ы, э, ъ is asked again.
+- 🏅 "Під дощем" and "Рання пташка" are decided by the first ticked step - a newer forecast can no longer take them away.
+
+### 🐛 Fixed
+- A progress edited by hand or cut off no longer breaks the app: broken records are dropped, ticks on missing steps ignored.
+- A cut-off quest link ("%E0") opens the search instead of crashing.
+- Two towns with the same name (two "Neuhof") are two towns with stable ids; the origin's namesake far away is kept.
+- After a late train the quest may run past midnight; a quest before the arrival is refused.
+- The AI's verdict no longer stays 6 h on a list of towns with gaps.
+- Only Enter or Space opens a town from a focused map pin.
+
+### 🔒 Security and limits
+- Coordinates outside Germany, empty coordinates and days long gone are refused (`origin_outside`, `date_out_of_range`).
+- At most 30 new searches and 20 AI calls a minute for the whole server (`busy`, 429); 40 s for the AI; station
+  suggestions cached for a day.
+- A clean stop on deploy (`init`, SIGTERM); the proxy waits 90 s for the verdict.
+
 ## [0.5.1] - 2026-11-17
 
 ### 🔧 Changed
