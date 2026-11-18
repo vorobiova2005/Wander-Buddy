@@ -20,7 +20,8 @@ function appWith(transit: Partial<TransitProvider>) {
     localityAt: async (p) =>
       p.lat === 50.34 ? { name: 'Schlüchtern', kind: 'town' } : p.lat === 50.5 ? { name: 'Eichenzell', kind: 'village' } : null,
   }
-  return createApp({ reachability: new ReachabilityService({ transit: provider, locality }) })
+  // A fixed "today": the searched days below stay within the allowed range whenever the tests run.
+  return createApp({ reachability: new ReachabilityService({ transit: provider, locality }), today: () => '2026-11-18' })
 }
 
 describe('GET /api/reachable', () => {

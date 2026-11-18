@@ -37,12 +37,22 @@ export class TtlCache<V> {
  */
 export class PersistentMap<V> {
   private readonly data: Record<string, V>
+  /** Changed since the last save: a search that learnt nothing new does not rewrite the file. */
+  private dirty = false
 
-  constructor(private readonly file?: string) {
+  /** `expired` drops outdated entries on load, so the file does not grow for ever. */
+  constructor(
+    private readonly file?: string,
+    expired?: (value: V) => boolean,
+  ) {
     this.data = {}
     if (!file) return
     try {
-      Object.assign(this.data, JSON.parse(readFileSync(file, 'utf-8')) as Record<string, V>)
+      const loaded = JSON.parse(readFileSync(file, 'utf-8')) as Record<string, V>
+      for (const [k, v] of Object.entries(loaded)) {
+        if (expired?.(v)) this.dirty = true
+        else this.data[k] = v
+      }
     } catch {
       // No file yet (first start) or unreadable: start empty, it is only a cache.
     }
@@ -62,13 +72,45 @@ export class PersistentMap<V> {
 
   set(key: string, value: V): void {
     this.data[key] = value
+    this.dirty = true
   }
 
   save(): void {
-    if (!this.file) return
+    if (!this.file || !this.dirty) return
     mkdirSync(dirname(this.file), { recursive: true })
     const tmp = `${this.file}.tmp`
     writeFileSync(tmp, JSON.stringify(this.data))
     renameSync(tmp, this.file)
+    this.dirty = false
+  }
+}
+
+/** The server is at its limit of fresh work for the moment (RateLimiter): HTTP 429, try again in a minute. */
+export class BusyError extends Error {
+  constructor(message = 'Too many new searches right now') {
+    super(message)
+    this.name = 'BusyError'
+  }
+}
+
+/**
+ * At most `limit` takes per `windowMs` (a sliding window), for the whole server. Guards the free external sources:
+ * a script cycling through departure times must not turn into hundreds of searches at Transitous or calls to the AI.
+ */
+export class RateLimiter {
+  private readonly taken: number[] = []
+
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  tryTake(): boolean {
+    const t = this.now()
+    while (this.taken.length && this.taken[0] <= t - this.windowMs) this.taken.shift()
+    if (this.taken.length >= this.limit) return false
+    this.taken.push(t)
+    return true
   }
 }

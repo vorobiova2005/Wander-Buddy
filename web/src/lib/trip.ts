@@ -16,7 +16,11 @@ function cached<T>(cache: Map<string, Promise<T>>, key: string, load: () => Prom
   if (!p) {
     p = load()
     cache.set(key, p)
-    p.catch(() => cache.delete(key)) // a failure is not kept: the next try asks again
+    const mine = p
+    // A failure is not kept: the next try asks again. Only this request's entry - not a newer retry's answer.
+    p.catch(() => {
+      if (cache.get(key) === mine) cache.delete(key)
+    })
   }
   return p
 }

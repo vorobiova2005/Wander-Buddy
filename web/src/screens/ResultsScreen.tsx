@@ -13,6 +13,9 @@ import { navigate } from '../lib/router'
 import { shortDay } from '../lib/time'
 import type { Loadable } from '../lib/trip'
 
+/** Server error codes with their own message (results.error.*); anything else is "something went wrong". */
+const KNOWN_ERRORS = ['origin_not_found', 'origin_outside', 'date_out_of_range', 'busy', 'upstream_unavailable', 'network']
+
 type Props = {
   search: Search
   destinations: Loadable<Destinations>
@@ -69,7 +72,7 @@ export function ResultsScreen({ search, destinations, verdict, retry, retryVerdi
   if (destinations.status === 'error' || destinations.data.cities.length === 0) {
     const message =
       destinations.status === 'error'
-        ? t(`results.error.${['origin_not_found', 'upstream_unavailable', 'network'].includes(destinations.error.code) ? destinations.error.code : 'other'}`)
+        ? t(`results.error.${KNOWN_ERRORS.includes(destinations.error.code) ? destinations.error.code : 'other'}`)
         : t('results.empty')
     const lines = t('wander.lines.lost', { returnObjects: true }) as string[]
     return (

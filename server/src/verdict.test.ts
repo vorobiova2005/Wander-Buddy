@@ -240,7 +240,8 @@ describe('VerdictService', () => {
 describe('GET /api/verdict', () => {
   const app = (ai: AiProvider | null) => {
     const { reachability, destinations: dest } = pipeline()
-    return createApp({ reachability, destinations: dest, verdicts: new VerdictService({ destinations: dest, ai }) })
+    // A fixed "today": the searched day stays within the allowed range whenever the tests run.
+    return createApp({ reachability, destinations: dest, verdicts: new VerdictService({ destinations: dest, ai }), today: () => '2026-11-18' })
   }
 
   it('without a Groq key answers 200 with the ranking and no verdict (the step 06 criterion)', async () => {

@@ -65,6 +65,9 @@ type Deps = {
 
 export type StoredPlaces = PlacesNearby & { at: number }
 
+/** How long found places are trusted: sights hardly change, so a month (saves the 5 000/day quota). */
+export const PLACES_TTL_MS = 30 * 24 * 3600_000
+
 export class DestinationService {
   private readonly weatherCache: TtlCache<Weather | null>
   private readonly placesStore: PersistentMap<StoredPlaces>
@@ -77,7 +80,7 @@ export class DestinationService {
   constructor(private readonly deps: Deps) {
     this.weatherCache = new TtlCache(deps.weatherTtlMs ?? 3600_000, 5000)
     this.placesStore = deps.placesStore ?? new PersistentMap()
-    this.placesTtlMs = deps.placesTtlMs ?? 30 * 24 * 3600_000
+    this.placesTtlMs = deps.placesTtlMs ?? PLACES_TTL_MS
   }
 
   async destinations(

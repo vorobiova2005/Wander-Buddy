@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createApp } from './app.js'
 import { PersistentMap } from './cache.js'
-import { DestinationService, type StoredPlaces } from './destinations.js'
+import { DestinationService, PLACES_TTL_MS, type StoredPlaces } from './destinations.js'
 import { createPlacesProvider, createWeatherProvider } from './enrichment/index.js'
 import { createAiProvider } from './ai/index.js'
 import { ReachabilityService } from './reachability.js'
@@ -28,16 +28,32 @@ const weather = createWeatherProvider()
 const places = createPlacesProvider()
 // Found places survive restarts and deploys (a month), one file per places provider.
 // v2: entries also carry sightsTotal; v1 files (without it) are left alone and no longer read.
-const placesStore = new PersistentMap<StoredPlaces>(join(stateDir, `places.${places.name}.v2.json`))
-const destinations = new DestinationService({ reachability, weather, places, placesStore })
+// Lists older than the places' month are dropped on start, so the file does not grow for ever.
+const placesStore = new PersistentMap<StoredPlaces>(
+  join(stateDir, `places.${places.name}.v2.json`),
+  (stored) => Date.now() - stored.at > PLACES_TTL_MS,
+)
+const destinations = new DestinationService({ reachability, weather, places, placesStore, placesTtlMs: PLACES_TTL_MS })
 
 const ai = createAiProvider()
 const verdicts = new VerdictService({ destinations, ai })
 
-serve({ fetch: createApp({ corsOrigins, reachability, destinations, verdicts }).fetch, port }, (info) => {
+const server = serve({ fetch: createApp({ corsOrigins, reachability, destinations, verdicts }).fetch, port }, (info) => {
   console.log(
     `Wander Buddy server v${APP_VERSION} on :${info.port} · transit=${transit.name} locality=${locality.name} ` +
       `weather=${weather.name} places=${places.name} ai=${ai ? `${ai.name}:${ai.model}` : 'none'} · ` +
       `${localityStore.size} known station localities`,
   )
 })
+
+// `docker stop` and a deploy send SIGTERM: finish the open requests and leave, instead of being killed after 10 s.
+for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(signal, () => {
+    console.log(`${signal}: closing`)
+    server.close(() => process.exit(0))
+    // nginx keeps idle keep-alive connections open; they would hold close() until the fallback below.
+    ;(server as { closeIdleConnections?: () => void }).closeIdleConnections?.()
+    // Docker kills after 10 s: a long verdict still running is cut off, its search simply asks again.
+    setTimeout(() => process.exit(0), 8_000).unref()
+  })
+}

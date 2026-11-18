@@ -89,10 +89,10 @@ export function TripMap({
             position={[p.lat, p.lon]}
             icon={icons.get(p.id)!}
             title={p.label}
-            zIndexOffset={p.id === activeId ? 1000 : 0}
+            zIndexOffset={zIndexOf(p, p.id === activeId)}
             alt={p.label}
             keyboard={Boolean(p.onSelect)}
-            eventHandlers={p.onSelect ? { click: p.onSelect, keypress: p.onSelect } : undefined}
+            eventHandlers={p.onSelect ? { click: p.onSelect, keypress: onEnter(p.onSelect) } : undefined}
           >
             <Tooltip
               className="wb-label"
@@ -105,9 +105,72 @@ export function TripMap({
           </Marker>
         ))}
         <FitBounds points={points} maxZoom={maxZoom} />
+        <Declutter points={points} activeId={activeId ?? null} />
       </MapContainer>
     </div>
   )
+}
+
+/**
+ * Which pin lies on top where pins overlap: the highlighted one, then by kind (the start, the top towns, the steps
+ * ...), and among numbered pins the smaller number - town 1 is never hidden under town 3. Leaflet adds the offset
+ * to the pin's vertical screen position (up to a few thousand px), so each step is far bigger than that.
+ */
+function zIndexOf(p: MapPoint, active: boolean): number {
+  if (active) return 100_000_000
+  return order(p) * 10_000_000 + (p.number ? (100 - Math.min(p.number, 99)) * 10_000 : 0)
+}
+
+/**
+ * Permanent labels of pins that are close together cover each other (a town's sights 50 m apart; two towns 5 km
+ * apart on a phone-sized map of the whole region). After every zoom and move, a label that would overlap a more
+ * important pin or label is hidden; it comes back when there is room. The name stays on the pin (title, alt).
+ */
+function Declutter({ points, activeId }: { points: MapPoint[]; activeId: string | null }) {
+  const map = useMap()
+  const signature = points.map((p) => `${p.id}|${p.kind}|${p.number ?? ''}|${p.lat},${p.lon}|${p.label}`).join(';') + `|${activeId ?? ''}`
+  useEffect(() => {
+    const byPlace = new Map(points.map((p) => [`${p.lat},${p.lon}|${p.label}`, p]))
+    const run = () => {
+      const pins: { marker: L.Marker; rank: number }[] = []
+      map.eachLayer((layer) => {
+        if (!(layer instanceof L.Marker)) return
+        const { lat, lng } = layer.getLatLng()
+        const p = byPlace.get(`${lat},${lng}|${layer.options.title ?? ''}`)
+        if (p) pins.push({ marker: layer, rank: zIndexOf(p, p.id === activeId) })
+      })
+      pins.sort((a, b) => b.rank - a.rank)
+      const taken: DOMRect[] = []
+      const free = (r: DOMRect) => taken.every((t) => r.right < t.left || r.left > t.right || r.bottom < t.top || r.top > t.bottom)
+      for (const { marker } of pins) {
+        const pin = marker.getElement()?.getBoundingClientRect()
+        const tooltip = marker.getTooltip()
+        const label = tooltip?.options.permanent ? tooltip.getElement() : undefined
+        if (label) {
+          label.style.visibility = ''
+          const box = label.getBoundingClientRect()
+          if (free(box)) taken.push(box)
+          else label.style.visibility = 'hidden'
+        }
+        if (pin) taken.push(pin)
+      }
+    }
+    // Labels open a moment after the pins are added: wait for the next frame.
+    const frame = requestAnimationFrame(run)
+    map.on('zoomend moveend resize', run)
+    return () => {
+      cancelAnimationFrame(frame)
+      map.off('zoomend moveend resize', run)
+    }
+    // `signature` describes the points and the highlight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, signature])
+  return null
+}
+
+/** A focused pin opens with Enter or Space, as a button does - not with any key. */
+const onEnter = (select: () => void) => (e: L.LeafletKeyboardEvent) => {
+  if (e.originalEvent.key === 'Enter' || e.originalEvent.key === ' ') select()
 }
 
 const order = (p: MapPoint) => ({ dot: 0, candidate: 1, step: 2, done: 2, top: 3, origin: 4 })[p.kind]

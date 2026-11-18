@@ -28,7 +28,7 @@ scrolling, the right navigation).
 
 | Screen | What happens |
 | ------ | ------------ |
-| Пошук | where from (station suggestions from `/api/stations`, or "Я тут" - the browser's location), this weekend's days or another date, departure time, travel limit 30 min - 3 h |
+| Пошук | where from (station suggestions from `/api/stations`, or "Я тут" - the browser's location), this weekend's days or another date, departure time, travel limit 30 min - 3 h. The form starts from the search of this tab's last results (origin, "Я тут" point and day included; a day already past is not taken), else from the last visit's town, time and limit. On a device not set to German time a "за часом Німеччини" hint stands next to the departure time - it is always read as Europe/Berlin |
 | Результати | the towns appear first, then Вандер's verdict; the map shows the start, the top 3 (orange) and two more; the other towns only when their list is open; pointing at a card highlights its pin; a card or a pin opens the town's quest |
 | Квест | the AI's plan for its first town, for any other town a plan from its places (arrival, sights, a café, the way back); a step is done by tapping it (tap again to undo), "+XP" pops up; the way back opens on bahn.de |
 | Прогрес | level and title, XP to the next level, towns, quests, the visited towns on a map, 6 badges |
@@ -36,14 +36,23 @@ scrolling, the right navigation).
 Clean URLs (History API): `/`, `/results?from=Fulda&date=…`, `/quest/<town>?…`, `/progress` - back works, a reload
 keeps the screen, a link can be shared; nginx answers every path with `index.html`. Old `/#/…` links are moved to
 the clean URL on load.
-Progress lives only in this browser (localStorage, no accounts).
+Progress lives only in this browser (localStorage, no accounts). On load it is checked field by field
+(`cleanProgress` in `web/src/lib/progress.ts`): a broken quest record (edited by hand, cut off, an old format) is
+dropped, the rest is kept. When the browser does not store anything (private mode, blocked or full storage), the
+Квест and Прогрес screens say that the progress ends with the tab. If a screen still crashes, an error screen
+(`ErrorBoundary`) offers "Оновити сторінку" and "Почати прогрес заново" (clears the stored progress).
 
 **Levels:** level n starts at 25·n·(n−1) XP (0, 50, 150, 300, 500, 750 …) - the first quest (≈ 90 XP) brings
 level 2. Titles: Новачок, Пасажир, Мандрівник, Дослідник, Слідопит, Легенда D-Ticket.
 **Badges:** Перший потяг (a first step), Замки й мури (a historic or architecture place), Під дощем (a step on a
-rainy day), Рання пташка (departure before 07:00), Квест пройдено (all steps of one quest), 10 міст.
+rainy day), Рання пташка (departure before 07:00), Квест пройдено (all steps of one quest), 10 міст. Whether a quest
+day is rainy or early is fixed by its first tick: a newer forecast or the same quest opened with another departure
+time does not give or take away Під дощем / Рання пташка.
 
 **Map:** OpenStreetMap tiles, toned down a little to the palette; attribution in the map corner and in the footer.
+Where pins overlap, the more important one is on top (highlighted, then start, top towns, steps…; among numbered
+pins the smaller number). After every zoom or move a label that would cover a more important pin or label is
+hidden and comes back when there is room; the name stays on the pin (title, alt).
 Leaflet loads in its own chunk when a screen with a map opens. **Fonts** are served by the app itself
 (`@fontsource-variable`), not from Google: no third-party request on page load.
 

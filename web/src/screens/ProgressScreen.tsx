@@ -3,7 +3,7 @@ import { TripMap } from '../components/LazyTripMap'
 import { Wander } from '../components/Wander'
 import { Button, Card, ScreenTitle, formatInt } from '../components/ui'
 import { navigate } from '../lib/router'
-import { BADGES, completedQuests, earnedBadges, levelOf, totalXp, useProgress, visitedTowns, type Badge } from '../lib/progress'
+import { BADGES, completedQuests, earnedBadges, levelOf, progressIsStored, totalXp, useProgress, visitedTowns, type Badge } from '../lib/progress'
 
 const BADGE_ICON: Record<Badge, string> = {
   firstTrain: '🚆',
@@ -31,6 +31,11 @@ export function ProgressScreen() {
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[420px_1fr] lg:items-start lg:gap-12">
       <div className="space-y-4">
         <ScreenTitle>{t('progress.title')}</ScreenTitle>
+        {!progressIsStored() && (
+          <p role="status" className="rounded-md border-2 border-accent bg-surface p-3 text-[13px] leading-[18px] font-semibold">
+            {t('progress.notStored')}
+          </p>
+        )}
         <Card as="section" className="space-y-4 p-5 text-center">
           <Wander mood={xp > 0 ? 'happy' : 'waiting'} size={170} className="mx-auto" />
           <div>

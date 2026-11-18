@@ -55,6 +55,6 @@ export type ChatMessage = { role: 'system' | 'user'; content: string }
 export interface AiProvider {
   readonly name: string
   readonly model: string
-  /** Asks for a JSON answer; returns the raw text. Validation is not the provider's job. */
-  completeJson(messages: ChatMessage[]): Promise<string>
+  /** Asks for a JSON answer; returns the raw text. Validation is not the provider's job. `signal` ends the wait early. */
+  completeJson(messages: ChatMessage[], signal?: AbortSignal): Promise<string>
 }

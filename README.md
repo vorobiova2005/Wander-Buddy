@@ -87,7 +87,7 @@ The [`VERSION`](VERSION) file is the only place the version lives:
 │   └── src/
 │       ├── App.tsx          the shell: navigation, routes, footer credits, level-up
 │       ├── screens/         Search · Results · Quest · Progress
-│       ├── components/      Вандер (11 moods), the map, city card, navigation, buttons
+│       ├── components/      Вандер (11 moods), the map, city card, navigation, buttons, the error screen
 │       ├── lib/             progress (XP, levels, badges), mood, quest without AI, routes, dates
 │       ├── api/             the API client and its answer types
 │       └── i18n/locales/    UI texts (uk.json)
@@ -148,6 +148,8 @@ Every response is JSON with an `ok` flag:
 { "ok": false, "error": { "code": "not_found", "message": "No route GET /api/x" } }
 ```
 
+Error codes and their HTTP statuses: [`docs/architecture.md`](docs/architecture.md#api-contract).
+
 | Method | Path | Answer |
 | ------ | ---- | ------ |
 | `GET` | `/api/health` | `{ "ok": true, "version": "0.1.0" }` - the server is alive 💚 |
@@ -156,8 +158,9 @@ Every response is JSON with an `ok` flag:
 | `GET` | `/api/destinations?…` (same parameters) | the same towns + weather 🌤️ + places 🏰 + a score 🧮, best first |
 | `GET` | `/api/verdict?…` (same parameters) | the AI verdict over the best 5: top 3, comparison, warnings, a quest, the character 🤖 |
 
-`/api/reachable` takes `from=<place>` or `lat=…&lon=…`; `date`/`time` are Europe/Berlin (default: today 09:00);
-`maxMinutes` 15-180 (default 120); `villages=true` also lists villages. Each town comes with minutes (waiting
+`/api/reachable` takes `from=<place>` or `lat=…&lon=…` (inside the supported countries); `date`/`time` are
+Europe/Berlin (default: today 09:00), `date` from yesterday to 60 days ahead; `maxMinutes` 15-180 (default 120);
+`villages=true` also lists villages. Each town comes with minutes (waiting
 included), transfers, arrival and the station. The `x-cache` header says `HIT` when the answer came from the cache.
 
 ```bash
@@ -174,8 +177,9 @@ CORS allows `https://wander-buddy.zebaro.dev` and `http://localhost:5173` (overr
 town centre, `sightsTotal` (notable sights around in all) and `score` - 0-100 with its parts (trip, weather, places),
 by formula 3.1 in [`docs/scoring.md`](docs/scoring.md). Towns come best score first.
 
-`/api/verdict` never fails because of the AI: without a key, when the model is down or answers wrongly twice,
-`verdict` is `null`, `ai.status` says why, and `fallback` is the ranking by score.
+`/api/verdict` never fails because of the AI: without a key, when the model is down, too slow or too busy, or
+answers wrongly twice, `verdict` is `null`, `ai.status` says why, and `fallback` is the ranking by score
+([`docs/ai-verdict.md`](docs/ai-verdict.md#failures-and-limits)).
 
 ## 🔄 CI/CD
 

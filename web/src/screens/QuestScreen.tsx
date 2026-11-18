@@ -10,7 +10,7 @@ import { WanderSays } from '../components/Wander'
 import { BackLink, Button, Chip, LinkButton, formatScore, useDuration } from '../components/ui'
 import { bahnSearchUrl } from '../lib/bahn'
 import { chooseMood, EARLY_BEFORE, pickLine } from '../lib/mood'
-import { levelOf, saveProgress, toggleStep, totalXp, useProgress, type QuestInfo } from '../lib/progress'
+import { levelOf, progressIsStored, saveProgress, toggleStep, totalXp, useProgress, type QuestInfo } from '../lib/progress'
 import { isFoodStep, questFor, questKey, type QuestWords } from '../lib/quest'
 import { navigate } from '../lib/router'
 import { localTime } from '../lib/time'
@@ -191,7 +191,14 @@ function CityQuest({
             )}
           </div>
         </header>
-        <div className="max-lg:order-2">{quest ? <WanderSays mood={mood} line={line} /> : <WaitingWander />}</div>
+        <div className="max-lg:order-2 space-y-3">
+          {quest ? <WanderSays mood={mood} line={line} /> : <WaitingWander />}
+          {!progressIsStored() && (
+            <p role="status" className="rounded-md border-2 border-accent bg-surface p-3 text-[13px] leading-[18px] font-semibold">
+              {t('progress.notStored')}
+            </p>
+          )}
+        </div>
         <div className="space-y-3 max-lg:order-4">
           {allDone ? (
             <p role="status" className="flex min-h-12 items-center justify-center gap-2 rounded-full bg-success/15 px-6 font-bold text-ink">

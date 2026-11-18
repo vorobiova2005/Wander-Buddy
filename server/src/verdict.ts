@@ -1,4 +1,4 @@
-import { TtlCache } from './cache.js'
+import { RateLimiter, TtlCache } from './cache.js'
 import { VERDICT_JSON_SCHEMA, VerdictSchema, type AiProvider, type ChatMessage, type Verdict } from './ai/types.js'
 import type { Destination, DestinationService, Destinations } from './destinations.js'
 import type { ReachabilityQuery } from './reachability.js'
@@ -62,6 +62,13 @@ type Deps = {
   failureTtlMs?: number
   /** After the AI fails (429, down), nobody asks it for this long - the free plan has 8 000 tokens a minute. */
   pauseMs?: number
+  /**
+   * Both tries together get at most this long. The web proxy waits 90 s for the whole request, and the towns
+   * may already have taken a part of it; past the budget the user gets the formula's ranking, not an error page.
+   */
+  aiBudgetMs?: number
+  /** Calls to the AI per minute for the whole server (the free plan: 1 000 a day, 8 000 tokens a minute). */
+  aiCallsPerMinute?: number
   now?: () => number
 }
 
@@ -70,9 +77,11 @@ export class VerdictService {
   private readonly inflight = new Map<string, Promise<VerdictAnswer>>()
   /** AI-wide breaker: until this moment every request gets the ranking without asking the AI. */
   private pausedUntil = 0
+  private readonly aiCalls: RateLimiter
 
   constructor(private readonly deps: Deps) {
-    this.cache = new TtlCache(deps.ttlMs ?? 6 * 3600_000, 500)
+    this.cache = new TtlCache(deps.ttlMs ?? 6 * 3600_000, 500, () => this.now())
+    this.aiCalls = new RateLimiter(deps.aiCallsPerMinute ?? 20, 60_000, () => this.now())
   }
 
   private now(): number {
@@ -110,9 +119,13 @@ export class VerdictService {
       enrichment: dest.enrichment,
       ai: { status: 'disabled', provider: this.deps.ai?.name ?? null, model: this.deps.ai?.model ?? null, problems: [] },
     }
-    // Data with gaps (no weather, places failed or paused) heals in minutes: do not keep a verdict on it for hours.
+    // Data with gaps (towns not looked up, no weather, places failed or paused) heals in minutes: do not keep a
+    // verdict on it for hours - the list of towns would soon differ from the verdict over it.
     const complete =
-      dest.enrichment.weather !== 'unavailable' && dest.enrichment.placesFailures === 0 && !dest.enrichment.placesPaused
+      dest.stats.localityFailures === 0 &&
+      dest.enrichment.weather !== 'unavailable' &&
+      dest.enrichment.placesFailures === 0 &&
+      !dest.enrichment.placesPaused
 
     if (candidates.length === 0) return this.keep(key, { ...answer, ai: { ...answer.ai, status: 'no_candidates' } }, complete)
     if (!this.deps.ai) return this.keep(key, answer, complete)
@@ -122,13 +135,31 @@ export class VerdictService {
 
     const messages = buildMessages(dest, candidates)
     let problems: string[] = []
+    const deadline = this.now() + (this.deps.aiBudgetMs ?? 40_000)
     // Two tries: the second one is told what was wrong with the first.
     for (let attempt = 1; attempt <= 2; attempt++) {
+      const left = deadline - this.now()
+      // Too little time left for a real second answer: the first one's problems stand.
+      if (attempt === 2 && left < 5_000) {
+        problems = [...problems, 'no time left for a second try']
+        break
+      }
+      // Too many calls this minute: the ranking without the AI, kept only seconds - a slot frees up soon.
+      if (!this.aiCalls.tryTake()) {
+        return this.keep(key, { ...answer, ai: { ...answer.ai, status: 'unavailable', problems: ['too many AI calls this minute'] } }, false, 10_000)
+      }
       const ask = attempt === 1 ? messages : [...messages, retryMessage(problems)]
+      const budget = AbortSignal.timeout(Math.max(1, left))
       let raw: string
       try {
-        raw = await this.deps.ai.completeJson(ask)
+        raw = await this.deps.ai.completeJson(ask, budget)
       } catch (err) {
+        // Our own time budget ran out: the AI is slow this once, not broken - no pause for everybody.
+        if (budget.aborted) {
+          console.warn(`AI: out of the ${(this.deps.aiBudgetMs ?? 40_000) / 1000} s budget on try ${attempt}`)
+          const status = attempt === 1 ? 'unavailable' : 'invalid'
+          return this.keep(key, { ...answer, ai: { ...answer.ai, status, problems: [...problems, 'the AI did not answer in time'] } }, false)
+        }
         const pause = this.deps.pauseMs ?? 60_000
         this.pausedUntil = this.now() + pause
         console.warn(`AI: ${(err as Error).message}; pausing the AI for ${pause / 1000} s`)
@@ -140,12 +171,12 @@ export class VerdictService {
       }
       problems = checked.problems
     }
-    console.warn(`AI: invalid verdict twice: ${problems.join('; ')}`)
+    console.warn(`AI: no valid verdict: ${problems.join('; ')}`)
     return this.keep(key, { ...answer, ai: { ...answer.ai, status: 'invalid', problems } }, false)
   }
 
-  private keep(key: string, answer: VerdictAnswer, good: boolean): VerdictAnswer {
-    this.cache.set(key, answer, good ? undefined : (this.deps.failureTtlMs ?? 2 * 60_000))
+  private keep(key: string, answer: VerdictAnswer, good: boolean, ttlMs?: number): VerdictAnswer {
+    this.cache.set(key, answer, ttlMs ?? (good ? undefined : (this.deps.failureTtlMs ?? 2 * 60_000)))
     return answer
   }
 }
@@ -183,22 +214,36 @@ export function checkVerdict(raw: string, candidates: Candidate[]): { verdict: V
   v.warnings
     .filter((w) => w.id && !byId.has(w.id))
     .forEach((w) => problems.push(`warning: unknown city id "${w.id}"`))
-  // The day goes forward and starts on arrival (HH:MM compares correctly as text).
+  // The day goes forward from the arrival - also past midnight after a late train (23:10 → 00:20 is later).
   const times = v.quest.steps.map((s) => s.time)
-  if (times.some((t, i) => i > 0 && t < times[i - 1])) problems.push('quest steps must be in time order')
-  if (questCity?.arrival && times[0] < questCity.arrival) {
-    problems.push(`quest starts at ${times[0]}, before the arrival at ${questCity.arrival}`)
+  const start = questCity?.arrival || times[0]
+  const offsets = times.map((t) => minutesAfter(start, t))
+  if (offsets.some((m, i) => i > 0 && m < offsets[i - 1])) problems.push('quest steps must be in time order')
+  // A step before the arrival: far behind it (wrapping round the clock), or - for a day that cannot run past
+  // midnight (arrival before 20:00) - any time earlier than the arrival.
+  const arrival = questCity?.arrival
+  if (arrival && (offsets[0] > MAX_QUEST_MINUTES || (arrival < LATE_ARRIVAL && times.some((t) => t < arrival)))) {
+    problems.push(`quest starts at ${times[0]}, before the arrival at ${arrival}`)
   }
+  if (offsets.at(-1)! > MAX_QUEST_MINUTES) problems.push(`the quest must fit into ${MAX_QUEST_MINUTES / 60} hours after the arrival`)
   problems.push(...idsInTexts(v, candidates))
+  problems.push(...nonUkrainianLetters(v))
   return problems.length ? { verdict: null, problems } : { verdict: v, problems: [] }
 }
 
-/**
- * Ids belong in the id fields only: the texts are read by people. Finds a city id, a place id, or anything shaped
- * like a place id (`otm:…`, by the prefixes of the given places) in a text field.
- */
-function idsInTexts(v: Verdict, candidates: Candidate[]): string[] {
-  const texts: [string, string][] = [
+/** Letters of Russian that Ukrainian has not (ё ы э ъ): a text with them is not Ukrainian ("Лаутершлёсчен"). */
+const NOT_UKRAINIAN = /[ёЁыЫэЭъЪ]/
+
+/** The fields whose text has letters that Ukrainian does not use - asked again, like a wrong id. */
+function nonUkrainianLetters(v: Verdict): string[] {
+  return verdictTexts(v)
+    .filter(([, text]) => NOT_UKRAINIAN.test(text))
+    .map(([field]) => `${field}: letters that are not Ukrainian (ё, ы, э, ъ) - write in Ukrainian, place names as given`)
+}
+
+/** Every text field of a verdict that people read, with its path. */
+function verdictTexts(v: Verdict): [string, string][] {
+  return [
     ...v.top.map((t, i): [string, string] => [`top.${i}.reason`, t.reason]),
     ['comparison', v.comparison],
     ...v.warnings.map((w, i): [string, string] => [`warnings.${i}.text`, w.text]),
@@ -209,6 +254,26 @@ function idsInTexts(v: Verdict, candidates: Candidate[]): string[] {
     ]),
     ['character.line', v.character.line],
   ]
+}
+
+/** Only after an arrival this late may a quest run past midnight. */
+const LATE_ARRIVAL = '20:00'
+
+/** A day trip's quest ends within this many minutes of the arrival. */
+const MAX_QUEST_MINUTES = 16 * 60
+
+/** Minutes from `from` to `to` (both HH:MM), going forward over midnight: 23:10 → 00:20 is 70. */
+export function minutesAfter(from: string, to: string): number {
+  const m = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+  return (m(to) - m(from) + 1440) % 1440
+}
+
+/**
+ * Ids belong in the id fields only: the texts are read by people. Finds a city id, a place id, or anything shaped
+ * like a place id (`otm:…`, by the prefixes of the given places) in a text field.
+ */
+function idsInTexts(v: Verdict, candidates: Candidate[]): string[] {
+  const texts = verdictTexts(v)
   const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const prefixes = [
     ...new Set(candidates.flatMap((c) => c.places.filter((p) => p.id.includes(':')).map((p) => p.id.split(':')[0] + ':'))),
@@ -230,7 +295,11 @@ You get the candidates already ranked by a scoring formula: score 0-100 with par
 Rules:
 - Choose ONLY among the candidates. In the id fields ("id", "cityId", "placeId") use ONLY the ids given.
 - Texts are read by people: in every text write the NAMES of towns and places, never an id (no "otm:…", no "hunfeld").
-- Write every text in Ukrainian: friendly, short, concrete. The character line may be playful.
+- Write every text in Ukrainian: friendly, short, concrete. The character line may be playful. Use Ukrainian
+  words ("кава", not "кофе") and never the letters ё, ы, э, ъ.
+- Names of towns and places: write them exactly as given in the candidates (the original German name, as on the
+  map: "Kloster Schlüchtern", "Lauterschlösschen"). Do not translate or transliterate them - people look for them
+  on signs and in maps.
 - "top": up to 3 destinations, best first. Follow the ranking unless you have a clear reason; if you change it, say why.
 - "comparison": how the top destinations differ (trip time, weather, what there is to see).
 - "warnings": rain or cold, long trips, transfers; always remind to check the train back in the evening.

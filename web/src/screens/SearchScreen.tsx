@@ -1,11 +1,11 @@
-import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, type Search } from '../api/client'
 import type { Station } from '../api/types'
 import { WanderSays } from '../components/Wander'
 import { Button, Card, useDuration } from '../components/ui'
 import { chooseMood, pickLine } from '../lib/mood'
-import { navigate } from '../lib/router'
+import { lastResults, navigate } from '../lib/router'
 import { addDays, shortDay, todayBerlin, weekendDays } from '../lib/time'
 
 const LAST = 'wb.lastSearch'
@@ -23,21 +23,47 @@ function remembered(): Remembered {
 
 type Origin = { kind: 'name'; text: string } | { kind: 'point'; lat: number; lon: number }
 
+/**
+ * Where the form starts: the search of this tab's last results (back from the results - the same search, "my place"
+ * and the day included), else what was remembered from an earlier visit.
+ */
+function startingPoint(today: string): { origin: Origin; date: string | null; time: string; maxMinutes: number } {
+  const last = lastResults()
+  const s = last && 'search' in last ? last.search : null
+  if (s && s.date >= today) {
+    const origin: Origin = s.lat !== undefined && s.lon !== undefined ? { kind: 'point', lat: s.lat, lon: s.lon } : { kind: 'name', text: s.from }
+    return { origin, date: s.date, time: s.time, maxMinutes: s.maxMinutes }
+  }
+  const r = remembered()
+  return { origin: { kind: 'name', text: r.from }, date: null, time: r.time, maxMinutes: r.maxMinutes }
+}
+
+/** The device is not on German time: the departure is still read as German time, so the form says so. */
+const notBerlinTime = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone !== 'Europe/Berlin'
+  } catch {
+    return false
+  }
+}
+
 /** Screen 1 - where from, when, how long on the way. */
 export function SearchScreen() {
   const { t } = useTranslation()
   const duration = useDuration()
   const today = todayBerlin()
   const weekend = weekendDays(today)
-  const [start] = useState(remembered)
+  const [start] = useState(() => startingPoint(today))
 
-  const [origin, setOrigin] = useState<Origin>({ kind: 'name', text: start.from })
-  const [date, setDate] = useState(weekend[0])
-  const [otherDate, setOtherDate] = useState(false)
+  const [origin, setOrigin] = useState<Origin>(start.origin)
+  const [date, setDate] = useState(start.date ?? weekend[0])
+  const [otherDate, setOtherDate] = useState(start.date !== null && !weekend.includes(start.date))
   const [time, setTime] = useState(start.time)
   const [maxMinutes, setMaxMinutes] = useState(start.maxMinutes)
   const [error, setError] = useState<string | null>(null)
   const [locating, setLocating] = useState(false)
+  // Bumped on every edit of the origin: a position that arrives after the user typed a town is not used.
+  const edits = useRef(0)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -47,10 +73,12 @@ export function SearchScreen() {
       document.getElementById('origin')?.focus()
       return
     }
+    // A tab left open past midnight still holds yesterday's day: search the next weekend day instead.
+    const day = date < today ? weekend[0] : date
     const search: Search =
       origin.kind === 'point'
-        ? { from: '', lat: origin.lat, lon: origin.lon, date, time, maxMinutes }
-        : { from: text, date, time, maxMinutes }
+        ? { from: '', lat: origin.lat, lon: origin.lon, date: day, time, maxMinutes }
+        : { from: text, date: day, time, maxMinutes }
     try {
       localStorage.setItem(LAST, JSON.stringify({ from: text, time, maxMinutes }))
     } catch {
@@ -66,19 +94,25 @@ export function SearchScreen() {
     }
     setLocating(true)
     setError(null)
+    const before = edits.current
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false)
+        if (edits.current !== before) return // the user typed a town meanwhile - that wins
         setOrigin({ kind: 'point', lat: pos.coords.latitude, lon: pos.coords.longitude })
       },
-      () => {
+      (err) => {
         setLocating(false)
-        setError(t('search.hereDenied'))
+        if (edits.current !== before) return
+        // Denied, too slow (indoors), or no position at all - each has its own advice.
+        const key = err.code === err.PERMISSION_DENIED ? 'hereDenied' : err.code === err.TIMEOUT ? 'hereTimeout' : 'hereUnavailable'
+        setError(t(`search.${key}`))
       },
       { enableHighAccuracy: false, timeout: 10_000, maximumAge: 300_000 },
     )
   }
 
+  const [berlinHint] = useState(notBerlinTime)
   const mood = chooseMood({ departure: time })
   const line = mood === 'sleepy' ? pickLine(t('wander.lines.sleepy', { returnObjects: true }) as string[], time) : t('wander.greeting')
 
@@ -116,6 +150,7 @@ export function SearchScreen() {
                 invalid={error !== null}
                 origin={origin}
                 onChange={(o) => {
+                  edits.current++
                   setOrigin(o)
                   setError(null)
                 }}
@@ -156,7 +191,7 @@ export function SearchScreen() {
                 />
               </label>
             )}
-            <label className="flex items-center gap-3 pt-1">
+            <label className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
               <span className="text-ink-muted">{t('search.departAt')}</span>
               <input
                 type="time"
@@ -165,6 +200,7 @@ export function SearchScreen() {
                 onChange={(e) => e.target.value && setTime(e.target.value)}
                 className="min-h-11 rounded-md border-2 border-line bg-bg px-3 font-bold tabular-nums"
               />
+              {berlinHint && <span className="text-[13px] leading-[18px] text-ink-muted">{t('search.berlinTime')}</span>}
             </label>
           </fieldset>
 

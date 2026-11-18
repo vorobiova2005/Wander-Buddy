@@ -6,6 +6,8 @@ services:
     image: ghcr.io/vorobiova2005/wander-buddy-server:latest
     container_name: wander-buddy-server
     restart: unless-stopped
+    # A tiny init as PID 1 passes SIGTERM on to Node and reaps zombies.
+    init: true
     environment:
       # Values come from the deploy step (GitHub Actions secrets), never from this file.
       - GROQ_API_KEY

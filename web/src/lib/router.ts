@@ -17,6 +17,10 @@ export type Route =
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
+/**
+ * A link's search, or null when it is malformed. A day long gone is still a search: the server answers
+ * "date_out_of_range" and the results screen says why - better than silently dropping the user on the search form.
+ */
 export function readSearch(p: URLSearchParams): Search | null {
   const date = p.get('date') ?? ''
   const time = p.get('time') ?? ''
@@ -24,8 +28,8 @@ export function readSearch(p: URLSearchParams): Search | null {
   if (!DATE.test(date) || !TIME.test(time) || !Number.isInteger(maxMinutes) || maxMinutes < 15 || maxMinutes > 180) return null
   const lat = p.get('lat'), lon = p.get('lon')
   if (lat !== null && lon !== null) {
-    const la = Number(lat), lo = Number(lon)
-    if (!Number.isFinite(la) || !Number.isFinite(lo)) return null
+    const la = lat.trim() ? Number(lat) : NaN, lo = lon.trim() ? Number(lon) : NaN
+    if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) return null
     return { from: '', lat: la, lon: lo, date, time, maxMinutes }
   }
   const from = (p.get('from') ?? '').trim()
@@ -41,8 +45,20 @@ export function parseRoute(url: string): Route {
   const search = readSearch(params)
   if (path === '/results' && search) return { name: 'results', search }
   const quest = /^\/quest\/([^/]+)$/.exec(path)
-  if (quest && search) return { name: 'quest', search, cityId: decodeURIComponent(quest[1]) }
+  if (quest && search) {
+    const cityId = decodeOrNull(quest[1])
+    if (cityId) return { name: 'quest', search, cityId }
+  }
   return { name: 'search' }
+}
+
+/** A link cut off in a messenger ("%E0") must not crash the app. */
+function decodeOrNull(s: string): string | null {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    return null
+  }
 }
 
 export function routeUrl(route: Route): string {
@@ -62,15 +78,21 @@ const here = () => window.location.pathname + window.location.search
 const LAST_RESULTS = 'wb.lastResults'
 const scrollPositions = new Map<string, number>()
 
+/**
+ * Remembers a search as this tab's last results - where the Map tab leads and what the search form starts from.
+ * Called for every results or quest screen shown, so a shared link or a reload counts too, not only the form.
+ */
+export function rememberResults(search: Search) {
+  try {
+    sessionStorage.setItem(LAST_RESULTS, routeUrl({ name: 'results', search }))
+  } catch {
+    // no storage - the Map tab then leads to the search
+  }
+}
+
 export function navigate(route: Route) {
   const url = routeUrl(route)
-  if (route.name === 'results' || route.name === 'quest') {
-    try {
-      sessionStorage.setItem(LAST_RESULTS, routeUrl({ name: 'results', search: route.search }))
-    } catch {
-      // no storage - the Map tab then leads to the search
-    }
-  }
+  if (route.name === 'results' || route.name === 'quest') rememberResults(route.search)
   scrollPositions.set(here(), window.scrollY)
   if (here() !== url) {
     window.history.pushState(null, '', url)

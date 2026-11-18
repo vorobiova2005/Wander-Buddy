@@ -5,7 +5,7 @@ import { BottomNav, TopNav, type Tab } from './components/Nav'
 import { Wander } from './components/Wander'
 import { Button } from './components/ui'
 import { levelOf, levelStart, totalXp, useProgress } from './lib/progress'
-import { lastResults, navigate, useRoute, type Route } from './lib/router'
+import { lastResults, navigate, rememberResults, routeUrl, useRoute, type Route } from './lib/router'
 import { useTrip } from './lib/trip'
 import { pickLine } from './lib/mood'
 import { ProgressScreen } from './screens/ProgressScreen'
@@ -38,6 +38,10 @@ export default function App() {
   useEffect(() => {
     main.current?.focus({ preventScroll: true })
   }, [screenKey])
+  // Each screen names the tab: history, bookmarks and screen readers tell the screens apart.
+  useEffect(() => {
+    document.title = `${t(`app.titles.${route.name}`)} · ${t('app.title')}`
+  }, [route.name, t])
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -86,6 +90,9 @@ function Screen({ route, onLevelUp }: { route: Route; onLevelUp: (level: number)
 function TripScreens({ route, onLevelUp }: { route: Extract<Route, { search: Search }>; onLevelUp: (level: number) => void }) {
   const { t } = useTranslation()
   const trip = useTrip(route.search)
+  const searchUrl = routeUrl({ name: 'results', search: route.search })
+  // Opened from a link or reloaded: still the search the form and the Map tab come back to.
+  useEffect(() => rememberResults(route.search), [searchUrl]) // eslint-disable-line react-hooks/exhaustive-deps
   const d = trip.destinations
   const towns = d.status === 'ok' ? t('unit.towns', { count: d.data.cities.length }) : ''
   // One quiet status line for screen readers - Вандер's jokes change every few seconds and are not announced.

@@ -1,7 +1,10 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { resetProgressCache } from './lib/progress'
+import type { Search } from './api/client'
+import { resetProgressCache, saveProgress } from './lib/progress'
+import { navigate } from './lib/router'
+import { addDays, todayBerlin, weekendDays } from './lib/time'
 import { clearTripCache } from './lib/trip'
 import { fakeApi, verdict } from './test/fixtures'
 
@@ -161,5 +164,179 @@ describe('quest and progress', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Позначити крок виконаним' }))
     expect(screen.getByRole('heading', { name: 'Новий рівень!' })).toBeInTheDocument()
     expect(screen.getByText('Рівень 2 - твоє звання «Пасажир».')).toBeInTheDocument()
+  })
+})
+
+/** A fetch whose destinations answer with a server error code. */
+const failingWith = (code: string, status: number) => {
+  const answer = fakeApi()
+  return vi.fn(async (input: string | URL | Request) =>
+    String(input).startsWith('/api/destinations')
+      ? new Response(JSON.stringify({ ok: false, error: { code, message: code } }), { status, headers: { 'Content-Type': 'application/json' } })
+      : answer(input),
+  )
+}
+
+describe('results errors', () => {
+  it.each([
+    ['origin_outside', 400, 'Пошук працює лише по Німеччині. Обери місто або станцію в Німеччині.'],
+    ['date_out_of_range', 400, 'Цей день уже минув або ще надто далеко. Обери дату в межах 60 днів.'],
+    ['busy', 429, 'Зараз забагато нових пошуків. Спробуй ще раз за хвилину.'],
+    ['something_new', 500, 'Щось пішло не так. Спробуй ще раз.'],
+  ])('the server code %s shows its own message', async (code, status, message) => {
+    vi.stubGlobal('fetch', failingWith(code, status))
+    go(RESULTS)
+    render(<App />)
+    expect(await screen.findByRole('alert')).toHaveTextContent(message)
+  })
+
+  it('an old shared link still opens the results and says the day is out of range', async () => {
+    vi.stubGlobal('fetch', failingWith('date_out_of_range', 400))
+    go('/results?from=Fulda&date=2020-01-01&time=09%3A00&maxMinutes=120')
+    render(<App />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Цей день уже минув')
+  })
+})
+
+describe('broken or unsaved progress', () => {
+  it('a hand-edited progress with an empty quest does not crash the app: level 1', () => {
+    localStorage.setItem('wb.progress.v1', '{"v":1,"since":null,"quests":{"x":{}}}')
+    resetProgressCache()
+    render(<App />)
+    expect(screen.getAllByText('Рівень 1').length).toBeGreaterThan(0)
+  })
+
+  it('a progress that is not JSON at all starts fresh', () => {
+    localStorage.setItem('wb.progress.v1', '{"v":1,"quests":')
+    resetProgressCache()
+    go('/progress')
+    render(<App />)
+    expect(screen.getByText('Рівень 1 · Новачок')).toBeInTheDocument()
+  })
+
+  it('the progress screen says so when the browser keeps nothing', () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    try {
+      saveProgress({ v: 1, since: null, quests: {} })
+      go('/progress')
+      render(<App />)
+      expect(
+        screen.getByText('Браузер не зберігає прогрес (приватний режим або заблоковане сховище): після закриття вкладки досвід зникне.'),
+      ).toBeInTheDocument()
+    } finally {
+      setItem.mockRestore()
+      saveProgress({ v: 1, since: null, quests: {} })
+    }
+  })
+
+  it('the progress screen keeps quiet when the progress is stored', () => {
+    go('/progress')
+    render(<App />)
+    expect(screen.queryByText(/Браузер не зберігає прогрес/)).not.toBeInTheDocument()
+  })
+})
+
+describe('back to the search', () => {
+  const day = weekendDays(todayBerlin())[0]
+  const back = async (search: Search) => {
+    render(<App />)
+    act(() => navigate({ name: 'results', search }))
+    // Wait for the loaded screen: the button of the loading one is replaced when the towns come.
+    await screen.findByRole('heading', { name: 'Топ-3 від Вандера' })
+    fireEvent.click(screen.getByRole('button', { name: 'Новий пошук' }))
+    expect(window.location.pathname).toBe('/')
+  }
+
+  it('restores the town, the time and the limit of the last results', async () => {
+    await back({ from: 'Hünfeld', date: day, time: '10:15', maxMinutes: 150 })
+    expect(screen.getByRole('combobox')).toHaveValue('Hünfeld')
+    expect(screen.getByLabelText('Виїзд о')).toHaveValue('10:15')
+    expect(screen.getByRole('slider')).toHaveValue('150')
+  })
+
+  it('restores "my place" for a search by position', async () => {
+    await back({ from: '', lat: 50.55, lon: 9.68, date: day, time: '07:30', maxMinutes: 90 })
+    expect(screen.getByRole('combobox')).toHaveValue('Моє місце')
+    expect(screen.getByLabelText('Виїзд о')).toHaveValue('07:30')
+    expect(screen.getByRole('slider')).toHaveValue('90')
+  })
+
+  it('a later day outside this weekend is restored as another date', async () => {
+    await back({ from: 'Fulda', date: addDays(todayBerlin(), 20), time: '09:00', maxMinutes: 120 })
+    expect(screen.getByRole('button', { name: 'Інша дата', pressed: true })).toBeInTheDocument()
+  })
+})
+
+describe('"I am here"', () => {
+  type Success = (pos: { coords: { latitude: number; longitude: number } }) => void
+  type Failure = (err: { code: number; PERMISSION_DENIED: 1; POSITION_UNAVAILABLE: 2; TIMEOUT: 3; message: string }) => void
+  let onSuccess: Success = () => {}
+  let onFailure: Failure = () => {}
+  beforeEach(() => {
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: vi.fn((ok: Success, fail: Failure) => {
+          onSuccess = ok
+          onFailure = fail
+        }),
+      },
+    })
+  })
+  afterEach(() => {
+    delete (navigator as { geolocation?: unknown }).geolocation
+  })
+  const fail = (code: number) => act(() => onFailure({ code, PERMISSION_DENIED: 1, POSITION_UNAVAILABLE: 2, TIMEOUT: 3, message: '' }))
+
+  it('uses the position when it arrives', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Я тут' }))
+    expect(screen.getByRole('button', { name: 'Шукаю…' })).toBeDisabled()
+    act(() => onSuccess({ coords: { latitude: 50.55, longitude: 9.68 } }))
+    expect(screen.getByRole('combobox')).toHaveValue('Моє місце')
+  })
+
+  it('ignores a position that arrives after the user typed a town', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Я тут' }))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Fulda' } })
+    act(() => onSuccess({ coords: { latitude: 50.55, longitude: 9.68 } }))
+    expect(screen.getByRole('combobox')).toHaveValue('Fulda')
+    expect(screen.getByRole('button', { name: 'Я тут' })).toBeEnabled()
+  })
+
+  it.each([
+    [1, 'Немає доступу до геолокації. Дозволь його в браузері або впиши місто.'],
+    [3, 'Не встиг визначити, де ти. Спробуй ще раз або впиши місто.'],
+    [2, 'Не вдалося визначити, де ти. Впиши місто.'],
+  ])('error code %i gives its own advice', (code, message) => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Я тут' }))
+    fail(code)
+    expect(screen.getByRole('alert')).toHaveTextContent(message)
+  })
+
+  it('keeps quiet about a failure after the user typed a town', () => {
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Я тут' }))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Fulda' } })
+    fail(3)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('tab title', () => {
+  it('names each screen in the document title', async () => {
+    render(<App />)
+    expect(document.title).toBe('Куди поїхати · Wander Buddy')
+    go('/progress')
+    expect(document.title).toBe('Мій прогрес · Wander Buddy')
+    go(RESULTS)
+    expect(document.title).toBe('Поїздки · Wander Buddy')
+    go('/quest/hunfeld?from=Fulda&date=2026-11-21&time=09%3A00&maxMinutes=120')
+    expect(document.title).toBe('Квест · Wander Buddy')
+    await screen.findByRole('heading', { name: 'Квест: День у Hünfeld' })
   })
 })

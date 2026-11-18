@@ -1,4 +1,4 @@
-import { PersistentMap, TtlCache } from './cache.js'
+import { BusyError, PersistentMap, RateLimiter, TtlCache } from './cache.js'
 import type {
   Coordinates,
   Locality,
@@ -48,11 +48,37 @@ type Deps = {
   stationRadiusMeters?: number
   /** Countries an origin may be in (ISO codes). Stops a typo from becoming a search in New York. */
   countries?: string[]
+  /** New (uncached) searches allowed per minute for the whole server - politeness towards Transitous. */
+  searchesPerMinute?: number
+  now?: () => number
 }
+
+/**
+ * Rough boxes [south, west, north, east] of the countries an origin may be in. A point outside every allowed
+ * country's box is refused before any request; a country without a box here is not checked (no false refusals).
+ */
+export const COUNTRY_BOXES: Record<string, [number, number, number, number]> = {
+  DE: [47.2, 5.8, 55.1, 15.1],
+  AT: [46.3, 9.5, 49.1, 17.2],
+  CH: [45.8, 5.9, 47.9, 10.5],
+  NL: [50.7, 3.3, 53.6, 7.3],
+  BE: [49.4, 2.5, 51.6, 6.5],
+  LU: [49.4, 5.7, 50.2, 6.6],
+  DK: [54.5, 8.0, 57.8, 15.2],
+  CZ: [48.5, 12.0, 51.1, 18.9],
+  PL: [49.0, 14.1, 54.9, 24.2],
+  FR: [41.3, -5.2, 51.1, 9.6],
+}
+
+/** Two stations of towns with the same name farther apart than this are two different towns ("Neuhof"). */
+const SAME_TOWN_METERS = 15_000
 
 export class ReachabilityService {
   private readonly cache: TtlCache<Reachability>
   private readonly origins = new TtlCache<Station | null>(24 * 3600_000)
+  /** Station suggestions while typing: the same letters are asked again and again. */
+  private readonly suggestions = new TtlCache<Station[]>(24 * 3600_000, 2000)
+  private readonly searches: RateLimiter
   /** Origin towns: memory only - an origin can be a user's own location, it is never written to disk. */
   private readonly originTowns = new TtlCache<Locality | null>(24 * 3600_000)
   /** Stations the resolver could not place: retried after a day, never stored for good. */
@@ -70,6 +96,17 @@ export class ReachabilityService {
     this.concurrency = deps.concurrency ?? 4
     this.radius = deps.stationRadiusMeters ?? 400
     this.countries = new Set((deps.countries ?? ['DE']).map((c) => c.toUpperCase()))
+    this.searches = new RateLimiter(deps.searchesPerMinute ?? 30, 60_000, deps.now)
+  }
+
+  /** Is a point inside one of the allowed countries (by their rough boxes)? */
+  isAllowedPoint(p: Coordinates): boolean {
+    return [...this.countries].some((c) => {
+      const box = COUNTRY_BOXES[c]
+      if (!box) return true
+      const [south, west, north, east] = box
+      return p.lat >= south && p.lat <= north && p.lon >= west && p.lon <= east
+    })
   }
 
   get providerName(): string {
@@ -78,10 +115,17 @@ export class ReachabilityService {
 
   /** Stations for a free-text query: only in the allowed countries and only real name matches. */
   async findStations(text: string, limit = 5): Promise<Station[]> {
-    const found = await this.deps.transit.findStations(text, limit * 2)
-    return found
-      .filter((s) => (s.country ? this.countries.has(s.country.toUpperCase()) : true) && namesMatch(text, s.name))
-      .slice(0, limit)
+    const key = `${limit}|${text.trim().toLowerCase()}`
+    const known = this.suggestions.get(key)
+    if (known) return known
+    return this.once(`stations|${key}`, async () => {
+      const found = await this.deps.transit.findStations(text, limit * 2)
+      const list = found
+        .filter((s) => (s.country ? this.countries.has(s.country.toUpperCase()) : true) && namesMatch(text, s.name))
+        .slice(0, limit)
+      this.suggestions.set(key, list)
+      return list
+    })
   }
 
   /** The best-matching station for a free-text origin, cached for a day. */
@@ -105,6 +149,9 @@ export class ReachabilityService {
     ].join('|')
     const hit = this.cache.get(key)
     if (hit) return { result: hit, cached: true }
+    // A new search costs Transitous a heavy one-to-all query and many lookups: limited for the whole server.
+    // Joining a search already running costs nothing.
+    if (!this.inflight.has(`reach|${key}`) && !this.searches.tryTake()) throw new BusyError()
     const result = await this.once(`reach|${key}`, () => this.compute(query, key))
     return { result, cached: false }
   }
@@ -128,18 +175,20 @@ export class ReachabilityService {
       const known = this.store.get(k)
       if (known) return known
       if (this.unknownStations.get(k)) return null
-      return this.once(`town|${k}`, async () => {
+      // Shared with a concurrent search for the same station - and each search counts a failure as its own gap.
+      const { town, failed } = await this.once(`town|${k}`, async () => {
         lookups++
         try {
           const found = await this.deps.locality.localityAt(station)
           if (found) this.store.set(k, found)
           else this.unknownStations.set(k, true)
-          return found
+          return { town: found, failed: false }
         } catch {
-          failures++
-          return null
+          return { town: null, failed: true }
         }
       })
+      if (failed) failures++
+      return town
     })
     try {
       this.store.save()
@@ -147,29 +196,37 @@ export class ReachabilityService {
       console.warn(`Could not save the station towns: ${(err as Error).message}`) // only a cache
     }
 
-    const byTown = new Map<string, City>()
+    // One entry per town: the stations of a town are grouped by its name, but two towns with the same name far
+    // apart (two "Neuhof"s) stay two entries with different ids. The fastest station represents the town.
+    const byTown: City[] = []
+    const originCenter = originTown ? (originTown.center ?? query.origin) : null
     stations.forEach((stop, i) => {
       const town = towns[i]
-      if (!town || town.name === originTown?.name) return
-      const current = byTown.get(town.name)
-      if (current && !isFaster(stop, current)) return
-      byTown.set(town.name, {
-        id: slugify(town.name),
+      if (!town) return
+      const center = town.center ?? { lat: stop.lat, lon: stop.lon }
+      if (originCenter && town.name === originTown?.name && distanceMeters(center, originCenter) <= SAME_TOWN_METERS) return
+      const at = byTown.findIndex((c) => c.name === town.name && distanceMeters(c.center, center) <= SAME_TOWN_METERS)
+      if (at >= 0 && !isFaster(stop, byTown[at])) return
+      const city: City = {
+        id: '', // set below, once all towns of this name are known
         name: town.name,
         kind: town.kind,
         minutes: stop.minutes,
         transfers: Math.max(0, stop.vehicles - 1),
         arrival: stop.arrival,
         station: { id: stop.id, name: stop.name, lat: stop.lat, lon: stop.lon },
-        center: town.center ?? { lat: stop.lat, lon: stop.lon },
-      })
+        center,
+      }
+      if (at >= 0) byTown[at] = city
+      else byTown.push(city)
     })
+    assignIds(byTown)
 
     const result: Reachability = {
       origin: { ...query.origin, locality: originTown?.name ?? null },
       departure: query.departure.toISOString(),
       maxMinutes: query.maxMinutes,
-      cities: [...byTown.values()].sort((a, b) => a.minutes - b.minutes || a.name.localeCompare(b.name)),
+      cities: byTown.sort((a, b) => a.minutes - b.minutes || a.name.localeCompare(b.name)),
       stats: {
         stops: stops.length,
         railStops: railStops.length,
@@ -201,6 +258,19 @@ export class ReachabilityService {
     const promise = work().finally(() => this.inflight.delete(key))
     this.inflight.set(key, promise)
     return promise
+  }
+}
+
+/**
+ * Ids the AI and the player's progress refer to: the slug of the name ("hunfeld"). Towns sharing a name in one answer
+ * get their centre added ("neuhof-5046-961") - the same town keeps the same id whichever of them is faster to reach.
+ */
+export function assignIds(cities: City[]): void {
+  const count = new Map<string, number>()
+  for (const c of cities) count.set(c.name, (count.get(c.name) ?? 0) + 1)
+  for (const c of cities) {
+    const slug = slugify(c.name)
+    c.id = count.get(c.name)! > 1 ? `${slug}-${Math.round(c.center.lat * 100)}-${Math.round(c.center.lon * 100)}` : slug
   }
 }
 

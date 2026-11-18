@@ -57,6 +57,9 @@ System message (`SYSTEM_PROMPT` in `verdict.ts`), in English for the model, aski
   reason, and say it;
 - texts are for people: names of towns and places, never an id; quest steps are a plan for the day - imperative or
   future tense, never past;
+- Ukrainian words ("кава", not "кофе") and never the letters ё, ы, э, ъ;
+- names of towns and places exactly as given in the candidates - the original German name, as on the map and on
+  signs ("Kloster Schlüchtern"), not translated or transliterated;
 - warnings about rain, cold, long trips and transfers, always a reminder to check the train back;
 - the quest starts at the arrival time in the first destination, has a lunch or coffee break, xp by effort;
 - answer with one JSON object matching the JSON Schema that follows.
@@ -147,7 +150,9 @@ User message - the search and the candidates as JSON. One candidate from the rea
 ## A real answer
 
 Fulda, Saturday 21.11.2026, 09:00, up to 120 min; model `openai/gpt-oss-120b` on Groq, 17.11.2026;
-passed the schema and the id check on the first try (`ai.status = "ok"`).
+passed the schema and the id check on the first try (`ai.status = "ok"`). Recorded before the rule on place names
+(18.11.2026): the translated names below ("Музей Конрада Цузе") are now asked for in the original German instead -
+on 18.11.2026 the same search gave "Kloster Schlüchtern", "Lauterschlösschen".
 
 ```json
 {
@@ -240,26 +245,38 @@ passed the schema and the id check on the first try (`ai.status = "ok"`).
 | Case | `ai.status` | What the user gets |
 | ---- | ----------- | ------------------ |
 | no `GROQ_API_KEY` or `AI_PROVIDER=none` | `disabled` | the ranking (`fallback`) |
-| Groq down, timeout (45 s), 429 | `unavailable` | the ranking; **the AI is paused for 60 s for every search** |
+| Groq down, its own timeout, 429 | `unavailable` | the ranking; **the AI is paused for 60 s for every search** |
+| our 40 s budget runs out (the AI is slow this once) | `unavailable` on the first try, `invalid` on the second (`problems` say "did not answer in time") | the ranking; kept 2 min; **no pause** for others |
 | a search while the AI is paused | `unavailable` | the ranking, without asking the AI |
-| answer not JSON / breaks the schema / unknown ids | (asked once more with the problems) | |
-| … wrong again | `invalid` + `problems[]` | the ranking; not asked again for 2 min |
+| more than **20 AI calls this minute** for the whole server | `unavailable` (`problems: ["too many AI calls this minute"]`) | the ranking; kept 10 s (a slot frees up soon) |
+| answer not JSON / breaks the schema / unknown ids / fails a check below | (asked once more with the problems) | |
+| … wrong again, or under 5 s of the budget left for the second try | `invalid` + `problems[]` | the ranking; not asked again for 2 min |
 | no towns reachable | `no_candidates` | empty lists |
 | checked verdict | `ok` | the verdict; reused for 6 h |
 
 Groq free plan (17.11.2026): 1 000 requests a day and 8 000 tokens a minute per model. **One verdict costs
 ≈ 3 400 tokens** (measured: 2 428 in + 948 out with `reasoning_effort: low`), so the minute quota fits about two
 fresh verdicts for the whole site - hence the cache (6 h), the shared in-flight call for identical requests, and the
-60-second pause after a failure. Each call logs its token use.
+60-second pause after a failure, and the server-wide limit of 20 AI calls a minute. Each call logs its token use.
 
-**Incomplete data** (weather unavailable, places failed or paused): the verdict is still made, but kept only 2 min,
-and the answer carries `enrichment` - the UI can tell "no weather" from "nice weather".
+**Time budget:** both tries together get at most **40 s** (the web proxy waits 90 s for the whole request, and the
+towns may already have taken part of it). The rest of the budget goes to the provider as an `AbortSignal`; Groq's
+own per-call timeout (45 s) stays as a backstop. Past the budget the user gets the ranking, not an error page.
 
-**Structure checks beyond the schema** (cheap now, a base for the diploma's content checks): quest steps go forward
-in time and start no earlier than the arrival in the quest city; no text field contains an id (a city id or a place
-id like `otm:…`) - ids go only into the id fields.
+**Incomplete data** (towns that could not be looked up, weather unavailable, places failed or paused): the verdict
+is still made, but kept only 2 min, and the answer carries `enrichment` - the UI can tell "no weather" from "nice
+weather".
 
-**Swappable:** the source is `AiProvider` (`completeJson(messages)`), chosen with `AI_PROVIDER`; the model with
+**Structure checks beyond the schema** (cheap now, a base for the diploma's content checks):
+
+- quest steps go forward in time from the arrival in the quest city, also past midnight after a late train
+  (arrival 23:10 → a step at 00:20 is 70 min later, in order); the first step is not before the arrival and the
+  last one is at most **16 h** after it;
+- no text field contains an id (a city id or a place id like `otm:…`) - ids go only into the id fields;
+- no text field contains ё, ы, э or ъ - letters Ukrainian does not have ("Лаутершлёсчен" is asked again).
+
+**Swappable:** the source is `AiProvider` (`completeJson(messages, signal?)` - `signal` ends the wait early),
+chosen with `AI_PROVIDER`; the model with
 `GROQ_MODEL` (default `openai/gpt-oss-120b`; also available: `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`).
 
 ## Measured locally 17.11.2026

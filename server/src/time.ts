@@ -18,6 +18,12 @@ export function isValidDateTime(date: string, time: string): boolean {
   return day.getUTCFullYear() === y && day.getUTCMonth() === mo - 1 && day.getUTCDate() === d && h < 24 && mi < 60
 }
 
+/** YYYY-MM-DD plus n days (calendar arithmetic, no time zone involved). */
+export function addDays(date: string, n: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
+}
+
 /** Today's date in a time zone, YYYY-MM-DD. */
 export function todayIn(timeZone = 'Europe/Berlin', now = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)

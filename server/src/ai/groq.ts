@@ -22,6 +22,9 @@ type Completion = {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
 }
 
+/** Aborts when either signal does. */
+const anySignal = (a: AbortSignal, b?: AbortSignal) => (b ? AbortSignal.any([a, b]) : a)
+
 export class Groq implements AiProvider {
   readonly name = 'groq'
   readonly model: string
@@ -32,7 +35,7 @@ export class Groq implements AiProvider {
     this.fetchImpl = options.fetch ?? fetch
   }
 
-  async completeJson(messages: ChatMessage[]): Promise<string> {
+  async completeJson(messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
     const url = new URL('/openai/v1/chat/completions', this.options.baseUrl ?? 'https://api.groq.com')
     let res: Response
     try {
@@ -54,7 +57,7 @@ export class Groq implements AiProvider {
           // tokens-per-minute quota.
           ...(this.model.startsWith('openai/gpt-oss') ? { reasoning_effort: 'low' } : {}),
         }),
-        signal: AbortSignal.timeout(this.options.timeoutMs ?? 45_000),
+        signal: anySignal(AbortSignal.timeout(this.options.timeoutMs ?? 45_000), signal),
       })
     } catch (err) {
       throw new UpstreamError(this.name, `chat failed: ${(err as Error).message}`)

@@ -46,7 +46,7 @@ instance with European timetables. No key.
 | ------ | ---- |
 | open-source, non-commercial | MIT, no ads or subscriptions |
 | User-Agent with name, version, contact | `WanderBuddy/<VERSION> (+https://wander-buddy.zebaro.dev)` |
-| heavy requests (`/one-to-all` etc.) light, coordinate above ~720 / 24 h | one-to-all only when a user searches; answers cached 6 h |
+| heavy requests (`/one-to-all` etc.) light, coordinate above ~720 / 24 h | one-to-all only when a user searches; answers cached 6 h; at most **30 new (uncached) searches a minute for the whole server** - beyond that `429 busy` (joining an identical search already running is free) |
 | link to the sources page, OpenStreetMap attribution | footer of the site |
 
 ### Query
@@ -69,9 +69,14 @@ into about **30 towns**:
    district (Frankfurt, Kassel, Hanau, Würzburg) - districts (Landkreis, ...-Kreis) are never taken for a town.
 4. **Town or village**: OSM place category of the municipality - `city`/`town` → town, anything else → village.
    Villages are hidden unless `villages=true`.
-5. **Fastest station per town**, the origin's own town left out, sorted by minutes.
+5. **Fastest station per town**, sorted by minutes. Stations belong to one town when the town names match and the
+   town centres are **at most 15 km** apart; two towns with the same name farther apart (two "Neuhof"s) stay two
+   entries. The origin's own town is left out only when its centre is within 15 km of the origin town's centre - a namesake far
+   away stays in.
 
-City ids are slugs of the name (`bad-hersfeld`) - the AI verdict refers to cities by them.
+City ids are slugs of the name (`bad-hersfeld`). When several towns in one answer share a name, each of them gets
+its centre added (`neuhof-5045-961`, `neuhof-5135-961`), so a town keeps its id whichever of them is faster to reach.
+The AI verdict refers to cities by them; the player's visited towns are counted by name and place, not by id.
 
 ## Caching
 
@@ -79,12 +84,16 @@ City ids are slugs of the name (`bad-hersfeld`) - the AI verdict refers to citie
 | ---- | ----- | -------- | --- |
 | whole answer of `/api/reachable` | memory | 6 h (2 min if some towns could not be looked up) | the heaviest request; `x-cache: HIT/MISS` header |
 | origin name → station | memory | 24 h | the same names are searched again and again |
+| station suggestions (`/api/stations`) | memory | 24 h | the same letters are typed again and again |
 | origin point → town | memory only | 24 h | an origin can be the user's own location - never written to disk |
 | station → town | `STATE_DIR/localities.<resolver>.v2.json` (Docker volume `wander-buddy-state`) | forever | towns do not move; survives restarts and deploys; one file per resolver |
 | station → "no town" | memory | 24 h | retried later, never stored for good |
 
 Identical requests that arrive while the first is still running wait for it instead of asking the source again
-(a double click, two users searching the same at once). If the store cannot be saved, the answer is still given.
+(a double click, two users searching the same at once). A shared station lookup that fails counts as a gap for
+every search waiting on it, so each of them gets the short 2-min cache. The stores on disk are rewritten only when
+something changed (a search that learnt nothing new does not touch the file). If a store cannot be saved, the
+answer is still given.
 
 Measured locally on 17.11.2026 (Fulda, 120 min):
 
@@ -123,7 +132,8 @@ ODbL (OpenStreetMap, Wikidata, Wikipedia) → credit in the footer. Key: `OPENTR
 - **Their limiter is stricter than 10/s in bursts**: at 8/s about 4 of 62 calls still got `429`. Now requests are
   spaced to **5 a second** and a `429` is retried twice (after 1 s and 2 s) → 0 failures in a cold search of 31 towns.
 - Found places are kept **30 days** in `STATE_DIR/places.<provider>.v2.json` (Docker volume): sights hardly change, and
-  a deploy does not cost the daily quota again. A failed town is not stored and is asked again next time.
+  a deploy does not cost the daily quota again. Lists older than 30 days are dropped when the server starts, so the
+  file does not grow for ever. A failed town is not stored and is asked again next time.
 - **Quota protection** (code review, 17.11.2026): places are asked only for towns, **never for villages** (even with
   `villages=true`), and for at most **40 towns per search**, fastest first - one anonymous request with
   `maxMinutes=180&villages=true` cannot spend the day's 5 000 calls. The rest get `places: []`
@@ -155,3 +165,10 @@ Fulda, Sat 21.11.2026 09:00, 120 min → 31 towns, every one with weather and pl
 Geocoders are fuzzy: "Atlantisxyz" once came back as "Atlantic Av" in New York and started a search there.
 So an origin must be in `ORIGIN_COUNTRIES` (default `DE`) and every word of the query (3+ letters) must start a
 word of the station name. Otherwise the API answers `404 origin_not_found` without a routing request.
+
+A start given as `lat`/`lon` is checked against rough boxes of the `ORIGIN_COUNTRIES` (`COUNTRY_BOXES` in
+`reachability.ts`: DE, AT, CH, NL, BE, LU, DK, CZ, PL, FR): a point outside every allowed country's box gets
+`400 origin_outside` before any request; a country without a box is not checked. An empty `lat=` or `lon=` is
+`400 bad_request` (it must not become the point 0,0).
+
+`/api/stations` takes `q` of 2-100 characters (anything else is `400 bad_request`).
