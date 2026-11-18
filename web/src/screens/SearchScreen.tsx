@@ -191,17 +191,25 @@ export function SearchScreen() {
                 />
               </label>
             )}
-            <label className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
-              <span className="text-ink-muted">{t('search.departAt')}</span>
-              <input
-                type="time"
-                value={time}
-                step={300}
-                onChange={(e) => e.target.value && setTime(e.target.value)}
-                className="min-h-11 rounded-md border-2 border-line bg-bg px-3 font-bold tabular-nums"
-              />
-              {berlinHint && <span className="text-[13px] leading-[18px] text-ink-muted">{t('search.berlinTime')}</span>}
-            </label>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+              <label className="flex items-center gap-3">
+                <span className="text-ink-muted">{t('search.departAt')}</span>
+                <input
+                  type="time"
+                  value={time}
+                  step={300}
+                  onChange={(e) => e.target.value && setTime(e.target.value)}
+                  aria-describedby={berlinHint ? 'depart-zone' : undefined}
+                  className="min-h-11 rounded-md border-2 border-line bg-bg px-3 font-bold tabular-nums"
+                />
+              </label>
+              {/* Outside the label: the field is still called "Виїзд о"; the hint is its description. */}
+              {berlinHint && (
+                <span id="depart-zone" className="text-[13px] leading-[18px] text-ink-muted">
+                  {t('search.berlinTime')}
+                </span>
+              )}
+            </div>
           </fieldset>
 
           <div className="space-y-2">

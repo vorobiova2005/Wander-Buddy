@@ -70,6 +70,24 @@ describe('search screen', () => {
     fireEvent.change(screen.getByLabelText('Виїзд о'), { target: { value: '06:15' } })
     expect(screen.getAllByRole('img', { name: 'Вандер позіхає з кавою' }).length).toBeGreaterThan(0)
   })
+
+  it.each([
+    ['Europe/Kyiv', true],
+    ['UTC', true],
+    ['Europe/Berlin', false],
+  ])('device in %s: German-time hint %s, the field keeps its own name', (timeZone, hint) => {
+    const real = Intl.DateTimeFormat.prototype.resolvedOptions
+    const spy = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...real.call(this), timeZone }
+      })
+    render(<App />)
+    const field = screen.getByLabelText('Виїзд о')
+    expect(field).toHaveAccessibleDescription(hint ? 'за часом Німеччини' : '')
+    expect(screen.queryByText('за часом Німеччини') !== null).toBe(hint)
+    spy.mockRestore()
+  })
 })
 
 describe('results', () => {
