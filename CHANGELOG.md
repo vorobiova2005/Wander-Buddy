@@ -2,6 +2,13 @@
 
 All notable changes. Versions follow [Semantic Versioning](https://semver.org); the version lives in [`VERSION`](VERSION).
 
+## [0.6.1] - 2026-11-18
+
+### 🐛 Fixed
+- ♿ The "за часом Німеччини" hint sat inside the label of the departure field, so the field was read as "Виїзд о за
+  часом Німеччини". It is now the field's description. A test runs the search form in three time zones (0.6.0 did not
+  reach production: CI, running in UTC, caught it).
+
 ## [0.6.0] - 2026-11-18
 
 After a review of the whole code: nothing a user does - or a broken link, a full storage, a slow AI - ends in a blank
